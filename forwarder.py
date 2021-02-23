@@ -6,6 +6,9 @@ import asyncio
 import logging
 import re
 
+SIGNAL_REGEX = r"(buy)|(sell)"
+LINKS_REGEX = r"https?:"
+
 logging.basicConfig(filename='forwarder.log', encoding='utf-8', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
 
@@ -82,7 +85,7 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
         message = event.message
         message_text = str(message.to_dict()['message']).lower()
 
-        is_primary = True
+        is_primary = message.button_count == 0
 
         if message.entities != None:
             for entity in message.entities:
@@ -91,16 +94,30 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
                     break
 
         if is_primary:
-            is_primary = re.match(
-                r"https?: \/\/(www\.)?[-a-zA-Z0-9@: % ._\+ ~  # =]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)", message_text) == None
+            contains_no_links = re.match(LINKS_REGEX, message_text) == None
+            is_signal = re.match(
+                SIGNAL_REGEX, message_text, re.IGNORECASE) != None
+            is_primary = contains_no_links and (message.is_reply or is_signal)
 
         try:
+            await asyncio.sleep(2)  # to avoid flood
             if is_primary:
-                await client.forward_messages(to_primary_id, message)
-                logging.info('Forwarding to primary (id = %s)', message.id)
+                if message.is_reply:
+                    await client.send_message(to_primary_id, message)
+                    logging.info('Sending to primary (id = %s)', message.id)
+                else:
+                    await client.forward_messages(to_primary_id, message)
+                    logging.info('Forwarding to primary (id = %s)', message.id)
+
             elif to_secondary_id != 0:
-                await client.forward_messages(to_secondary_id, message)
-                logging.info('Forwarding to secondary (id = %s)', message.id)
+                if message.is_reply:
+                    await client.send_message(to_secondary_id, message)
+                    logging.info(
+                        'Sending to secondary (id = %s)', message.id)
+                else:
+                    await client.forward_messages(to_secondary_id, message)
+                    logging.info(
+                        'Forwarding to secondary (id = %s)', message.id)
             else:
                 logging.info(
                     'Message has not been forwarded (id = %s)', message.id)

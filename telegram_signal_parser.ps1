@@ -64,7 +64,7 @@ foreach ($item in $mainJson.messages) {
         $isSlTpOk = $isTpOk;
     }
 
-    if ($text -match "(Buy)|(Sell)[\D]*([0-9\s]{2,8}\.?[0-9]{0,5})" -and $text -match $symbolLowerRegex) {
+    if ($text -match "(buy)|(sell)[\D]*([0-9\s]{2,8}\.?[0-9]{0,5})" -and $text -match $symbolLowerRegex) {
 
         if ($null -ne $lastSignal -and $lastSignal.IsSlTpDelayed) {
             # Write-Output "No TP or SL for " $item.text; 

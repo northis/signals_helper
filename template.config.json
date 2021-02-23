@@ -1,15 +1,15 @@
 {
   "forwards": [
     {
-      "from_chat_title": "from_chat_title",
       "from_chat_id": 0,
+      "from_chat_title": "from_chat_title",
       "to_primary": {
-        "title": "title0",
-        "id": 0
+        "id": 0,
+        "title": "title"
       },
       "to_secondary": {
-        "title": "title1",
-        "id": 0
+        "id": 0,
+        "title": "title"
       }
     }
   ]

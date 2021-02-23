@@ -1,5 +1,7 @@
 .env
 config.json
-secure_session.session
+*.session
 __pycache__
 *.log
+*.ex5
+*.session-journal
