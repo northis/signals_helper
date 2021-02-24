@@ -1,4 +1,5 @@
-from telethon import TelegramClient, sync, events, tl
+from telethon import TelegramClient, sync, events, tl, errors
+from telethon.tl.functions.messages import ImportChatInviteRequest
 import config
 import os
 from dotenv import load_dotenv
@@ -7,7 +8,8 @@ import logging
 import re
 
 SIGNAL_REGEX = r"(buy)|(sell)"
-LINKS_REGEX = r"https?:"
+LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
+INVITE_REGEX = r"joinchat/(.+)"
 
 logging.basicConfig(filename='forwarder.log', encoding='utf-8', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
@@ -18,6 +20,7 @@ main_config = config.get_config()
 api_id = os.getenv('api_id')
 api_hash = os.getenv('api_hash')
 forwards = main_config['forwards']
+join_channels = main_config['join_channels']
 
 
 async def main_exec():
@@ -83,47 +86,116 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
     @client.on(events.NewMessage(chats=(from_chat_id)))
     async def handler(event):
         message = event.message
-        message_text = str(message.to_dict()['message']).lower()
+        orig_message_text = str(message.to_dict()['message'])
+        message_text = orig_message_text.lower()
 
         is_primary = message.button_count == 0
+        join_urls = list()
 
+        reply = None
+        if message.is_reply:
+            reply = await message.get_reply_message()
+            is_primary = is_primary and (reply.button_count == 0)
+
+        if message.buttons != None:
+            for button in message.buttons:
+                if isinstance(button, tl.types.KeyboardButtonUrl):
+                    join_urls.append(button.url)
+                    break
+                if not isinstance(button, list):
+                    continue
+                for buttonInner in button:
+                    if isinstance(buttonInner.button, tl.types.KeyboardButtonUrl):
+                        join_urls.append(buttonInner.button.url)
+                        break
+
+# join_channels
         if message.entities != None:
             for entity in message.entities:
                 if isinstance(entity, tl.types.MessageEntityUrl):
                     is_primary = False
                     break
 
-        if is_primary:
-            contains_no_links = re.match(LINKS_REGEX, message_text) == None
-            is_signal = re.match(
-                SIGNAL_REGEX, message_text, re.IGNORECASE) != None
-            is_primary = contains_no_links and (message.is_reply or is_signal)
+        if (reply != None) and (reply.entities != None):
+            for entity in reply.entities:
+                if isinstance(entity, tl.types.MessageEntityUrl):
+                    is_primary = False
+                    break
+
+        contains_no_links = None
+        is_signal = None
+
+        message_link = re.search(LINKS_REGEX, orig_message_text, re.IGNORECASE)
+        contains_no_links = message_link == None
+        if (message_link != None):
+            join_urls.append(message_link.group(0))
+
+        if reply != None:
+            reply_text = str(reply.to_dict()['message'])
+            message_link = re.search(LINKS_REGEX, reply_text, re.IGNORECASE)
+            contains_no_links = contains_no_links and (message_link == None)
+            if (message_link != None):
+                join_urls.append(message_link.group(0))
+
+        is_signal = re.search(SIGNAL_REGEX, message_text) != None
+        is_primary = is_primary and contains_no_links and (
+            message.is_reply or is_signal)
+
+        logging.info(
+            'Message %s (contains_no_links=%s, is_signal=%s)', message.id, contains_no_links, is_signal)
 
         try:
-            await asyncio.sleep(2)  # to avoid flood
+            # await asyncio.sleep(2)  # to avoid flood
             if is_primary:
+                prime_messages = list()
                 if message.is_reply:
-                    await client.send_message(to_primary_id, message)
-                    logging.info('Sending to primary (id = %s)', message.id)
-                else:
-                    await client.forward_messages(to_primary_id, message)
-                    logging.info('Forwarding to primary (id = %s)', message.id)
+                    prime_messages.append(reply)
+                    logging.info(
+                        'Forwarded to reply to primary (reply id = %s, message id = %s)', reply.id, message.id)
+
+                prime_messages.append(message)
+                await client.forward_messages(to_primary_id, prime_messages)
+                logging.info('Forwarding to primary (id = %s)', message.id)
 
             elif to_secondary_id != 0:
-                if message.is_reply:
-                    await client.send_message(to_secondary_id, message)
-                    logging.info(
-                        'Sending to secondary (id = %s)', message.id)
-                else:
-                    await client.forward_messages(to_secondary_id, message)
-                    logging.info(
-                        'Forwarding to secondary (id = %s)', message.id)
+                if join_channels:
+                    for url in join_urls:
+                        invite_code = getInviteStringFromUrl(url)
+                        if invite_code != None:
+                            logging.info(
+                                'Joining with invite code %s', invite_code)
+                            try:
+                                await client(ImportChatInviteRequest(invite_code))
+                            except Exception:
+                                logging.info(
+                                    'Cannot add by code %s (already invited?)', invite_code)
+                            break
+
+                await client.forward_messages(to_secondary_id, message)
+                logging.info(
+                    'Forwarding to secondary (id = %s)', message.id)
             else:
                 logging.info(
                     'Message has not been forwarded (id = %s)', message.id)
 
+        except errors.rpcerrorlist.MessageIdInvalidError:
+            try:
+                if (not is_primary) and (to_secondary_id != 0):
+                    await client.send_message(to_secondary_id, message_text)
+                    logging.info(
+                        'Sending deleted to secondary (id = %s)', message.id)
+            except Exception as errDel:
+                logging.exception(errDel)
         except Exception as err:
             logging.exception(err)
+
+
+def getInviteStringFromUrl(url):
+    search_link = re.search(INVITE_REGEX, url)
+    if search_link != None:
+        return search_link.group(1)
+    return None
+    # await client(ImportChatInviteRequest('AAAAAEHbEkejzxUjAUCfYg'))
 
 
 if __name__ == "__main__":
