@@ -1,5 +1,6 @@
 from telethon import TelegramClient, sync, events, tl, errors
-from telethon.tl.functions.messages import ImportChatInviteRequest
+from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest
+from telethon.tl.functions.channels import GetMessagesRequest
 import config
 import os
 from dotenv import load_dotenv
@@ -96,6 +97,19 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
         if message.is_reply:
             reply = await message.get_reply_message()
             is_primary = is_primary and (reply.button_count == 0)
+            if reply.entities != None:
+                for entity in reply.entities:
+                    if isinstance(entity, tl.types.MessageEntityTextUrl):
+                        join_urls.append(entity.url)
+                        is_primary = False
+                        break
+
+        if message.entities != None:
+            for entity in message.entities:
+                if isinstance(entity, tl.types.MessageEntityTextUrl):
+                    join_urls.append(entity.url)
+                    is_primary = False
+                    break
 
         if message.buttons != None:
             for button in message.buttons:
@@ -145,17 +159,27 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
             'Message %s (contains_no_links=%s, is_signal=%s)', message.id, contains_no_links, is_signal)
 
         try:
-            # await asyncio.sleep(2)  # to avoid flood
             if is_primary:
                 prime_messages = list()
+                primary_reply_outer = None
                 if message.is_reply:
+                    async for primary_reply in client.iter_messages(
+                            to_primary_id, from_user=reply.chat.id, search=reply_text):
+                        primary_reply_outer = primary_reply
+                        break
+
                     prime_messages.append(reply)
                     logging.info(
                         'Forwarded to reply to primary (reply id = %s, message id = %s)', reply.id, message.id)
 
                 prime_messages.append(message)
-                await client.forward_messages(to_primary_id, prime_messages)
-                logging.info('Forwarding to primary (id = %s)', message.id)
+
+                if primary_reply_outer == None:
+                    await client.forward_messages(to_primary_id, prime_messages)
+                    logging.info('Forwarding to primary (id = %s)', message.id)
+                else:
+                    await client.send_message(to_primary_id, message, reply_to=primary_reply_outer)
+                    logging.info('Replying to primary (id = %s)', message.id)
 
             elif to_secondary_id != 0:
                 if join_channels:
@@ -165,10 +189,28 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
                             logging.info(
                                 'Joining with invite code %s', invite_code)
                             try:
-                                await client(ImportChatInviteRequest(invite_code))
-                            except Exception:
+                                result = await client(CheckChatInviteRequest(
+                                    hash=invite_code
+                                ))
+                                logging.info('Checking channel %s',
+                                             result.chat.title)
+                                need_to_add = True
+                                async for dialog in client.iter_dialogs():
+                                    if dialog.entity.id == result.chat.id:
+                                        need_to_add = False
+                                        break
+                                if need_to_add:
+                                    await client(ImportChatInviteRequest(invite_code))
+                                    logging.info(
+                                        'Just added to channel %s', result.chat.title)
+                                else:
+                                    logging.info(
+                                        'Already in channel %s', result.chat.title)
+
+                            except Exception as errChat:
+                                errChat.with_traceback
                                 logging.info(
-                                    'Cannot add by code %s (already invited?)', invite_code)
+                                    'Cannot add by code %s: error:%s', invite_code, str(errChat))
                             break
 
                 await client.forward_messages(to_secondary_id, message)
