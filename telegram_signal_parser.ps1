@@ -22,12 +22,13 @@ class MessageProps {
     [decimal]$Price;
 }
 
-$mainJson = Get-Content ".\ElliottWaveVIP.json" | ConvertFrom-Json;
+$mainJson = Get-Content ".\result.json" | ConvertFrom-Json;
 $signalsResult = @{};
 $serviceMessageLengthMax = 200;
 $symbolLowerRegex = "(gold)|(xau)|(xauusd)";
 $symbolName = "xauusd";
-$channelName = "ElliottWaveVIP";
+$channelName = "ChannelName";
+$replies_count = 0;
 
 $lastSignal = [SignalProps]@{};
 $style = [Globalization.NumberStyles]::Float;
@@ -116,6 +117,7 @@ foreach ($item in $mainJson.messages) {
 
     if ($isReply) {        
         $lastSignalLocal = $signalsResult[$item.reply_to_message_id.ToString()];
+        $replies_count++;
     }
     
     $message = [MessageProps]@{

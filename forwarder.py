@@ -94,6 +94,7 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
         join_urls = list()
 
         reply = None
+        reply_text = None
         if message.is_reply:
             reply = await message.get_reply_message()
             is_primary = is_primary and (reply.button_count == 0)
@@ -160,7 +161,6 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
 
         try:
             if is_primary:
-                prime_messages = list()
                 primary_reply_outer = None
                 if message.is_reply:
                     async for primary_reply in client.iter_messages(
@@ -168,17 +168,24 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
                         primary_reply_outer = primary_reply
                         break
 
-                    prime_messages.append(reply)
                     logging.info(
                         'Forwarded to reply to primary (reply id = %s, message id = %s)', reply.id, message.id)
 
-                prime_messages.append(message)
-
                 if primary_reply_outer == None:
-                    await client.forward_messages(to_primary_id, prime_messages)
-                    logging.info('Forwarding to primary (id = %s)', message.id)
+                    if reply_text == None:
+                        await client.forward_messages(to_primary_id, message)
+                        logging.info(
+                            'Forwarding to primary (id = %s)', message.id)
+                    else:
+                        ready_message = "`" + reply_text + "`\n" + \
+                            message_text + "\n*" + message.chat.title + "*"
+                        await client.send_message(to_primary_id, ready_message)
+                        logging.info(
+                            'Replying missed message to primary (id = %s)', message.id)
+
                 else:
-                    await client.send_message(to_primary_id, message, reply_to=primary_reply_outer)
+                    answer_message = orig_message_text + "\n*" + message.chat.title + "*"
+                    await client.send_message(to_primary_id, answer_message, reply_to=primary_reply_outer)
                     logging.info('Replying to primary (id = %s)', message.id)
 
             elif to_secondary_id != 0:
@@ -237,7 +244,6 @@ def getInviteStringFromUrl(url):
     if search_link != None:
         return search_link.group(1)
     return None
-    # await client(ImportChatInviteRequest('AAAAAEHbEkejzxUjAUCfYg'))
 
 
 if __name__ == "__main__":
