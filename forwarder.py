@@ -178,13 +178,13 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
                             'Forwarding to primary (id = %s)', message.id)
                     else:
                         ready_message = "`" + reply_text + "`\n" + \
-                            message_text + "\n*" + message.chat.title + "*"
+                            message_text + "\n\n" + message.chat.title
                         await client.send_message(to_primary_id, ready_message)
                         logging.info(
                             'Replying missed message to primary (id = %s)', message.id)
 
                 else:
-                    answer_message = orig_message_text + "\n*" + message.chat.title + "*"
+                    answer_message = orig_message_text + "\n\n" + message.chat.title
                     await client.send_message(to_primary_id, answer_message, reply_to=primary_reply_outer)
                     logging.info('Replying to primary (id = %s)', message.id)
 
