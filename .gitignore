@@ -5,3 +5,4 @@ __pycache__
 *.log
 *.ex5
 *.session-journal
+links.json

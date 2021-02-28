@@ -1,16 +1,19 @@
 from telethon import TelegramClient, sync, events, tl, errors
 from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest
-from telethon.tl.functions.channels import GetMessagesRequest
+from telethon.tl.functions.channels import GetMessagesRequest, JoinChannelRequest
 import config
 import os
 from dotenv import load_dotenv
 import asyncio
 import logging
 import re
+import datetime
+from datetime import timezone
 
 SIGNAL_REGEX = r"(buy)|(sell)"
 LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
 INVITE_REGEX = r"joinchat/(.+)"
+URL_REGEX = r"t.me/(.+)"
 
 logging.basicConfig(filename='forwarder.log', encoding='utf-8', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
@@ -22,6 +25,7 @@ api_id = os.getenv('api_id')
 api_hash = os.getenv('api_hash')
 forwards = main_config['forwards']
 join_channels = main_config['join_channels']
+links = config.get_links()
 
 
 async def main_exec():
@@ -124,7 +128,6 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
                         join_urls.append(buttonInner.button.url)
                         break
 
-# join_channels
         if message.entities != None:
             for entity in message.entities:
                 if isinstance(entity, tl.types.MessageEntityUrl):
@@ -191,28 +194,73 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
             elif to_secondary_id != 0:
                 if join_channels:
                     for url in join_urls:
-                        invite_code = getInviteStringFromUrl(url)
-                        if invite_code != None:
+
+                        url_exists = False
+                        for link_url in links:
+                            if link_url == url:
+                                url_exists = True
+                                break
+
+                        if url_exists:
+                            logging.info('Already exists url %s', url)
+                            continue
+
+                        invite_code_typle = getInviteStringFromUrl(url)
+                        if invite_code_typle != None:
+                            invite_code = invite_code_typle[0]
+                            is_public = invite_code_typle[1]
                             logging.info(
                                 'Joining with invite code %s', invite_code)
                             try:
-                                result = await client(CheckChatInviteRequest(
-                                    hash=invite_code
-                                ))
-                                logging.info('Checking channel %s',
-                                             result.chat.title)
-                                need_to_add = True
-                                async for dialog in client.iter_dialogs():
-                                    if dialog.entity.id == result.chat.id:
-                                        need_to_add = False
-                                        break
-                                if need_to_add:
-                                    await client(ImportChatInviteRequest(invite_code))
-                                    logging.info(
-                                        'Just added to channel %s', result.chat.title)
+                                if is_public:
+                                    result = await client(JoinChannelRequest(invite_code))
                                 else:
+                                    result = await client(CheckChatInviteRequest(
+                                        hash=invite_code
+                                    ))
+                                need_to_add = True
+                                chat = None
+                                if hasattr(result, 'chat'):
+                                    chat = result.chat
+                                elif hasattr(result, 'chats'):
+                                    need_to_add = False
+                                    chat = result.chats[0]
+
+                                if chat == None:
                                     logging.info(
-                                        'Already in channel %s', result.chat.title)
+                                        'Cannot find right channel for %s', invite_code)
+                                else:
+
+                                    exist = False
+
+                                    for existed_link in links:
+                                        if existed_link['id'] == chat.id:
+                                            if (existed_link['access_url'] != url) or (existed_link['name'] != chat.title):
+                                                existed_link['access_url'] = url
+                                                existed_link['name'] = chat.title
+                                                existed_link['change_date_utc'] = datetime.datetime.now(
+                                                    datetime.timezone.utc).isoformat()
+                                            config.set_links(links)
+                                            exist = True
+                                            break
+                                    if exist:
+                                        logging.info(
+                                            'Known channel %s', chat.title)
+                                        continue
+
+                                    logging.info(
+                                        'Checking channel %s', chat.title)
+                                    async for dialog in client.iter_dialogs():
+                                        if dialog.entity.id == chat.id:
+                                            need_to_add = False
+                                            break
+                                    if need_to_add:
+                                        await client(ImportChatInviteRequest(invite_code))
+                                        logging.info(
+                                            'Just added to channel %s', chat.title)
+                                    else:
+                                        logging.info(
+                                            'Already in channel %s', chat.title)
 
                             except Exception as errChat:
                                 errChat.with_traceback
@@ -242,8 +290,12 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
 def getInviteStringFromUrl(url):
     search_link = re.search(INVITE_REGEX, url)
     if search_link != None:
-        return search_link.group(1)
-    return None
+        return (search_link.group(1), False)
+
+    search_link = re.search(URL_REGEX, url)
+    if search_link == None:
+        return None
+    return (search_link.group(1), True)
 
 
 if __name__ == "__main__":
