@@ -232,14 +232,14 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
                                 else:
 
                                     exist = False
-
+                                    now = datetime.datetime.now(
+                                        datetime.timezone.utc).isoformat()
                                     for existed_link in links:
                                         if existed_link['id'] == chat.id:
                                             if (existed_link['access_url'] != url) or (existed_link['name'] != chat.title):
                                                 existed_link['access_url'] = url
                                                 existed_link['name'] = chat.title
-                                                existed_link['change_date_utc'] = datetime.datetime.now(
-                                                    datetime.timezone.utc).isoformat()
+                                                existed_link['change_date_utc'] = now
                                             config.set_links(links)
                                             exist = True
                                             break
@@ -255,7 +255,15 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
                                             need_to_add = False
                                             break
                                     if need_to_add:
-                                        await client(ImportChatInviteRequest(invite_code))
+                                        chat = await client(ImportChatInviteRequest(invite_code))
+                                        chat = chat.chats[0]
+
+                                        links.append(
+                                            {"id": chat.id, "access_url": url, "name": chat.title, "add_date_utc:": now, "change_date_utc:": now})
+
+                                        print("Added %s " % chat.title)
+                                        config.set_links(links)
+                                        links = config.get_links()
                                         logging.info(
                                             'Just added to channel %s', chat.title)
                                     else:

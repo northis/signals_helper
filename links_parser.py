@@ -84,16 +84,17 @@ async def main_exec():
 
                 if is_private:
                     try:
-                        await asyncio.sleep(10)
                         result = await client(CheckChatInviteRequest(
                             hash=check_str
                         ))
+                        await asyncio.sleep(30)
                     except FloodWaitError as e:
                         print('Flood waited for', e.seconds)
-                        await asyncio.sleep(e.seconds+1)
+                        await asyncio.sleep(e.seconds+31)
                         result = await client(CheckChatInviteRequest(
                             hash=check_str
                         ))
+
                 else:
                     result = await client(JoinChannelRequest(check_str))
 
@@ -111,7 +112,12 @@ async def main_exec():
                     chat = result.chats[0]
 
                 if need_to_add:
-                    chat = await client(ImportChatInviteRequest(check_str))
+                    try:
+                        chat = await client(ImportChatInviteRequest(check_str))
+                    except FloodWaitError as e:
+                        print('import - Flood waited for', e.seconds)
+                        await asyncio.sleep(e.seconds+31)
+                        chat = await client(ImportChatInviteRequest(check_str))
                     chat = chat.chats[0]
 
                 now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -124,16 +130,20 @@ async def main_exec():
                             existed_link['name'] = chat.title
                             existed_link['change_date_utc'] = now
                         exist = True
+                        print("Changed %s " % chat.title)
                         break
 
                 if exist:
+                    set_links(links_target)
                     continue
 
                 links_target.append(
                     {"id": chat.id, "access_url": str_text, "name": chat.title, "add_date_utc:": now, "change_date_utc:": now})
 
+                print("Added %s " % chat.title)
                 set_links(links_target)
                 links_target = get_links()
+
             except Exception as ex:
                 print("Message %s, error %s" % (str_text, str(ex)))
 
