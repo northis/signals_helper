@@ -87,7 +87,6 @@ async def main_exec():
                         result = await client(CheckChatInviteRequest(
                             hash=check_str
                         ))
-                        await asyncio.sleep(30)
                     except FloodWaitError as e:
                         print('Flood waited for', e.seconds)
                         await asyncio.sleep(e.seconds+31)
