@@ -1,25 +1,29 @@
 import json
 
 
-def get_config():
-    with open('config.json', 'r', encoding="utf-8") as f:
+def get_json(file):
+    with open(file, 'r', encoding="utf-8") as f:
         config = json.load(f)
         return config
+
+
+def set_json(file, json_object):
+    with open(file, 'w', encoding="utf-8") as f:
+        json.dump(obj=json_object, fp=f, indent=2,
+                  sort_keys=True, ensure_ascii=False)
+
+
+def get_config():
+    return get_json('config.json')
 
 
 def set_config(config):
-    with open('config.json', 'w', encoding="utf-8") as f:
-        json.dump(obj=config, fp=f, indent=2,
-                  sort_keys=True, ensure_ascii=False)
+    set_json('config.json', config)
 
 
 def get_links():
-    with open('links.json', 'r', encoding="utf-8") as f:
-        config = json.load(f)
-        return config
+    return get_json('links.json')
 
 
-def set_links(config):
-    with open('links.json', 'w', encoding="utf-8") as f:
-        json.dump(obj=config, fp=f, indent=2,
-                  sort_keys=True, ensure_ascii=False)
+def set_links(links):
+    set_json('links.json', links)
