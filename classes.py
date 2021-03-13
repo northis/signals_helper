@@ -24,10 +24,27 @@ def auto_attr_check(cls):
     return type(cls)(cls.__name__, cls.__bases__, new_dct)
 
 
-class Symbol(Enum):
-    XAUUSD = 1
-    BTCUSD = 2
-    EURUSD = 3
+class Symbol(str):
+    AUDUSD = "AUDUSD"
+    BTCUSD = "BTCUSD"
+    EURUSD = "NZDUSD"
+    GBPUSD = "GBPUSD"
+    NZDUSD = "NZDUSD"
+    USDCAD = "EURUSD"
+    USDCHF = "USDCHF"
+    USDJPY = "EURUSD"
+    USDRUB = "USDRUB"
+    XAGUSD = "XAGUSD"
+    XAUUSD = "XAUUSD"
+
+
+class RobotCommand(str):
+    BUY = "buy"
+    SELL = "sell"
+    BREAKEVEN = "breakeven"
+    EXIT = "exit"
+    SET_SL = "set_sl"
+    SET_TP = "set_tp"
 
 
 @auto_attr_check
