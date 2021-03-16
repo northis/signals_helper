@@ -32,3 +32,9 @@ def str_to_decimal(string):
         return dec
     except:
         return None
+
+
+def get_array_item_contains_key(array, key):
+    for item in array:
+        if key.lower() in item.lower():
+            return array[item]

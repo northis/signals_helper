@@ -9,19 +9,42 @@ import decimal
 import os
 import classes
 from dotenv import load_dotenv
+from helper import get_array_item_contains_key
 import requests
+from time import sleep
+from threading import Thread
+import json
 
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
+POLL_INPUT_FORMAT = r"%Y-%m-%d %H:%M:%S"
 DB_PATH = os.getenv("db_path")
 API_KEY = os.getenv("api_key")
+BASE_URL = f"https://www.alphavantage.co/query?&interval=1min&apikey={API_KEY}"
+FX_URL = f"{BASE_URL}&function=FX_INTRADAY"
+CRYPTO_URL = f"https://api-pub.bitfinex.com/v2/candles/trade:1m:"
 
-FX_URL = f"https://cloud.iexapis.com/v1/query?function=FX_INTRADAY&interval=1min&apikey={API_KEY}&datatype=csv"
+poll_work_flag = True
+poll_tread: Thread = None
+poll_event = threading.Event()
+poll_interval_sec = 60*60
 
 symbol_api_mapping = {
     classes.Symbol.AUDUSD: f"{FX_URL}&from_symbol=AUD&to_symbol=USD",
-    classes.Symbol.BTCUSD: f"{FX_URL}&from_symbol=BTC&to_symbol=USD"}
+    classes.Symbol.EURUSD: f"{FX_URL}&from_symbol=EUR&to_symbol=USD",
+    classes.Symbol.GBPUSD: f"{FX_URL}&from_symbol=GBP&to_symbol=USD",
+    classes.Symbol.NZDUSD: f"{FX_URL}&from_symbol=NZD&to_symbol=USD",
+    classes.Symbol.USDCAD: f"{FX_URL}&from_symbol=USD&to_symbol=CAD",
+    classes.Symbol.USDCHF: f"{FX_URL}&from_symbol=USD&to_symbol=CHF",
+    classes.Symbol.USDJPY: f"{FX_URL}&from_symbol=USD&to_symbol=JPY",
+    classes.Symbol.USDRUB: f"{FX_URL}&from_symbol=USD&to_symbol=RUB",
+    classes.Symbol.XAGUSD: f"{BASE_URL}&function=TIME_SERIES_INTRADAY&symbol=SILVER",
+    classes.Symbol.XAUUSD: f"{BASE_URL}&function=TIME_SERIES_INTRADAY&symbol=GOLD"
+}
+
+crypto_symbol_api_mapping = {
+    classes.Symbol.BTCUSD: f"{CRYPTO_URL}tBTCUSD/hist"}
 
 # lock = threading.Lock()
 
@@ -135,38 +158,56 @@ def import_all_example():
     print("Done")
 
 
+def insert_poll_data(timezone, symbol, data_array):
+    for price_item in data_array:
+        utc_date = helper.str_to_utc_iso_datetime(
+            price_item, timezone, POLL_INPUT_FORMAT)
+        values = data_array[price_item]
+        open_ = get_array_item_contains_key(values, "open")
+        high = get_array_item_contains_key(values, "high")
+        low = get_array_item_contains_key(values, "low")
+        close = get_array_item_contains_key(values, "close")
+        exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date}',{open_},{high},{low},{close}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
+        print(exec_string)
+
+
+def process_price_data(symbol, price_data):
+    meta = get_array_item_contains_key(price_data, "meta")
+    timezone = get_array_item_contains_key(meta, "time zone")
+    prices = get_array_item_contains_key(price_data, "series")
+    insert_poll_data(timezone, symbol, prices)
+
+
+def process_price_data_crypto(symbol, price_data):
+    print("rrr")
+
+
 def poll_symbols():
-    url = symbol_api_mapping[classes.Symbol.AUDUSD]
-    r = requests.get(url)
-    content = r.content
+    while poll_work_flag:
+        for symbol in symbol_api_mapping:
+
+            r = requests.get(symbol_api_mapping[symbol])
+            content = r.text
+            process_price_data(symbol, content)
+
+        for symbol in crypto_symbol_api_mapping:
+            r = requests.get(crypto_symbol_api_mapping[symbol])
+            content = r.text
+            process_price_data_crypto(symbol, content)
+        poll_event.wait(poll_interval_sec)
+        poll_event.clear()
 
 
 def start_poll():
-    timer = threading.Timer(10, poll_symbols)
-    timer.start()
-
-
-def stop_poll():
-    timer.cancel()
-    return timer
+    poll_tread = Thread(target=poll_symbols, daemon=True)
+    poll_tread.start()
 
 
 if __name__ == "__main__":
-    url = "https://apidojo-yahoo-finance-v1.p.rapidapi.com/stock/v3/get-historical-data"
-
-    querystring = {"symbol": "GC=F", "region": "US"}
-
-    headers = {
-        'x-rapidapi-key': "49e23e5256mshd03ebc7d3cf773dp1c16f4jsnb3ee71622514",
-        'x-rapidapi-host': "apidojo-yahoo-finance-v1.p.rapidapi.com"
-    }
-
-    response = requests.request(
-        "GET", url, headers=headers, params=querystring)
-
-    print(response.text)
 
     start_poll()
     print("Press any key to exit")
     input()
-    stop_poll()
+    poll_stop_flag = False
+    poll_event.set()
+    poll_tread.join()
