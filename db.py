@@ -14,6 +14,7 @@ import requests
 from time import sleep
 from threading import Thread
 import json
+import logging
 
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
@@ -28,7 +29,9 @@ CRYPTO_URL = f"https://api-pub.bitfinex.com/v2/candles/trade:1m:"
 poll_work_flag = True
 poll_tread: Thread = None
 poll_event = threading.Event()
-poll_interval_sec = 60*60
+poll_interval_sec = 60 * 60
+
+commit_throttle = 1000000
 
 symbol_api_mapping = {
     classes.Symbol.AUDUSD: f"{FX_URL}&from_symbol=AUD&to_symbol=USD",
@@ -105,7 +108,7 @@ def import_csv(symbol, input_file):
 
             cur.execute(exec_string)
             count += 1
-            if count % 1000000 == 0:
+            if count % commit_throttle == 0:
                 sql_connection.commit()
                 print("Count %s, symbol %s" % (count, symbol))
 
@@ -158,28 +161,52 @@ def import_all_example():
     print("Done")
 
 
-def insert_poll_data(timezone, symbol, data_array):
-    for price_item in data_array:
-        utc_date = helper.str_to_utc_iso_datetime(
-            price_item, timezone, POLL_INPUT_FORMAT)
-        values = data_array[price_item]
-        open_ = get_array_item_contains_key(values, "open")
-        high = get_array_item_contains_key(values, "high")
-        low = get_array_item_contains_key(values, "low")
-        close = get_array_item_contains_key(values, "close")
-        exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date}',{open_},{high},{low},{close}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
-        print(exec_string)
-
-
 def process_price_data(symbol, price_data):
     meta = get_array_item_contains_key(price_data, "meta")
     timezone = get_array_item_contains_key(meta, "time zone")
     prices = get_array_item_contains_key(price_data, "series")
-    insert_poll_data(timezone, symbol, prices)
+
+    sql_connection = sqlite3.connect(DB_PATH)
+    cur = sql_connection.cursor()
+
+    try:
+        for price_item in prices:
+            utc_date = helper.str_to_utc_iso_datetime(
+                price_item, timezone, POLL_INPUT_FORMAT)
+            values = prices[price_item]
+            open_ = get_array_item_contains_key(values, "open")
+            high = get_array_item_contains_key(values, "high")
+            low = get_array_item_contains_key(values, "low")
+            close = get_array_item_contains_key(values, "close")
+            exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date}',{open_},{high},{low},{close}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
+            cur.execute(exec_string)
+    except Exception as ex:
+        logging.info('process_price_data: %s', ex)
+    finally:
+        sql_connection.commit()
+        sql_connection.close()
 
 
 def process_price_data_crypto(symbol, price_data):
-    print("rrr")
+    sql_connection = sqlite3.connect(DB_PATH)
+    cur = sql_connection.cursor()
+
+    try:
+        for price_item in price_data:
+            utc_date = datetime.datetime.utcfromtimestamp(
+                price_item[0]/1000).strftime(DT_INPUT_FORMAT)
+
+            open_ = price_item[1]
+            close = price_item[2]
+            high = price_item[3]
+            low = price_item[4]
+            exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date}',{open_},{high},{low},{close}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
+            cur.execute(exec_string)
+    except Exception as ex:
+        logging.info('process_price_data_crypto: %s', ex)
+    finally:
+        sql_connection.commit()
+        sql_connection.close()
 
 
 def poll_symbols():
@@ -188,12 +215,15 @@ def poll_symbols():
 
             r = requests.get(symbol_api_mapping[symbol])
             content = r.text
-            process_price_data(symbol, content)
+            price_data = json.loads(content)
+            process_price_data(symbol, price_data)
 
         for symbol in crypto_symbol_api_mapping:
             r = requests.get(crypto_symbol_api_mapping[symbol])
             content = r.text
-            process_price_data_crypto(symbol, content)
+            price_data = json.loads(content)
+            process_price_data_crypto(symbol, price_data)
+
         poll_event.wait(poll_interval_sec)
         poll_event.clear()
 
@@ -204,7 +234,6 @@ def start_poll():
 
 
 if __name__ == "__main__":
-
     start_poll()
     print("Press any key to exit")
     input()
