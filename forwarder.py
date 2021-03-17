@@ -25,7 +25,7 @@ api_id = os.getenv('api_id')
 api_hash = os.getenv('api_hash')
 forwards = main_config['forwards']
 join_channels = main_config['join_channels']
-links = config.get_links()
+links = None
 
 
 async def main_exec():
@@ -187,8 +187,7 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
                             'Replying missed message to primary (id = %s)', message.id)
 
                 else:
-                    answer_message = orig_message_text + "\n\n" + message.chat.title
-                    await client.send_message(to_primary_id, answer_message, reply_to=primary_reply_outer)
+                    await client.send_message(to_primary_id, message, reply_to=primary_reply_outer)
                     logging.info('Replying to primary (id = %s)', message.id)
 
             elif to_secondary_id != 0:
@@ -308,4 +307,5 @@ def getInviteStringFromUrl(url):
 
 if __name__ == "__main__":
     print("Press Ctrl+C to exit...")
+    links = config.get_links()
     asyncio.run(main_exec())
