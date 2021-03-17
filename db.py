@@ -20,6 +20,7 @@ load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
 POLL_INPUT_FORMAT = r"%Y-%m-%d %H:%M:%S"
+DB_DATE_FORMAT = r"%Y-%m-%d %H:%M:%S+00:00"
 DB_PATH = os.getenv("db_path")
 API_KEY = os.getenv("api_key")
 BASE_URL = f"https://www.alphavantage.co/query?&interval=1min&apikey={API_KEY}"
@@ -30,6 +31,7 @@ poll_work_flag = True
 poll_tread: Thread = None
 poll_event = threading.Event()
 poll_interval_sec = 60 * 60
+api_extended_poll_threshold_min = 90
 
 commit_throttle = 1000000
 
@@ -48,6 +50,20 @@ symbol_api_mapping = {
 
 crypto_symbol_api_mapping = {
     classes.Symbol.BTCUSD: f"{CRYPTO_URL}tBTCUSD/hist"}
+
+db_time_ranges = {
+    classes.Symbol.AUDUSD: (None, None),
+    classes.Symbol.BTCUSD: (None, None),
+    classes.Symbol.EURUSD: (None, None),
+    classes.Symbol.GBPUSD: (None, None),
+    classes.Symbol.NZDUSD: (None, None),
+    classes.Symbol.USDCAD: (None, None),
+    classes.Symbol.USDCHF: (None, None),
+    classes.Symbol.USDJPY: (None, None),
+    classes.Symbol.USDRUB: (None, None),
+    classes.Symbol.XAGUSD: (None, None),
+    classes.Symbol.XAUUSD: (None, None)
+}
 
 # lock = threading.Lock()
 
@@ -161,24 +177,46 @@ def import_all_example():
     print("Done")
 
 
-def process_price_data(symbol, price_data):
-    meta = get_array_item_contains_key(price_data, "meta")
-    timezone = get_array_item_contains_key(meta, "time zone")
-    prices = get_array_item_contains_key(price_data, "series")
+def process_price_data(symbol, price_data, use_ctypto):
+    if use_ctypto:
+        sorted_items = price_data
+    else:
+        meta = get_array_item_contains_key(price_data, "meta")
+        timezone = get_array_item_contains_key(meta, "time zone")
+        price_data = get_array_item_contains_key(price_data, "series")
+        sorted_items = sorted(price_data.keys())
 
     sql_connection = sqlite3.connect(DB_PATH)
     cur = sql_connection.cursor()
+    symbol_last_datetime = db_time_ranges[symbol][1]
 
     try:
-        for price_item in prices:
-            utc_date = helper.str_to_utc_iso_datetime(
-                price_item, timezone, POLL_INPUT_FORMAT)
-            values = prices[price_item]
-            open_ = get_array_item_contains_key(values, "open")
-            high = get_array_item_contains_key(values, "high")
-            low = get_array_item_contains_key(values, "low")
-            close = get_array_item_contains_key(values, "close")
-            exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date}',{open_},{high},{low},{close}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
+        for price_item in sorted_items:
+            if use_ctypto:
+                utc_date = datetime.datetime.utcfromtimestamp(
+                    price_item[0] / 1000)
+            else:
+                utc_date = helper.str_to_utc_datetime(
+                    price_item, timezone, POLL_INPUT_FORMAT)
+
+            if symbol_last_datetime > utc_date:
+                continue
+
+            utc_date_str = utc_date.strftime(DB_DATE_FORMAT)
+
+            if use_ctypto:
+                open_ = price_item[1]
+                close = price_item[2]
+                high = price_item[3]
+                low = price_item[4]
+            else:
+                values = price_data[price_item]
+                open_ = get_array_item_contains_key(values, "open")
+                high = get_array_item_contains_key(values, "high")
+                low = get_array_item_contains_key(values, "low")
+                close = get_array_item_contains_key(values, "close")
+
+            exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date_str}',{open_},{high},{low},{close}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
             cur.execute(exec_string)
     except Exception as ex:
         logging.info('process_price_data: %s', ex)
@@ -187,42 +225,74 @@ def process_price_data(symbol, price_data):
         sql_connection.close()
 
 
-def process_price_data_crypto(symbol, price_data):
+def update_db_time_ranges():
+    for symbol in db_time_ranges:
+        update_db_time_range(symbol)
+
+
+def update_db_time_range(symbol):
     sql_connection = sqlite3.connect(DB_PATH)
     cur = sql_connection.cursor()
-
     try:
-        for price_item in price_data:
-            utc_date = datetime.datetime.utcfromtimestamp(
-                price_item[0]/1000).strftime(DT_INPUT_FORMAT)
+        # Fill the DB first, this code thinks it will return something anyway
+        exec_string = f"SELECT [DateTime] From {symbol} ORDER BY [DateTime]"
 
-            open_ = price_item[1]
-            close = price_item[2]
-            high = price_item[3]
-            low = price_item[4]
-            exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date}',{open_},{high},{low},{close}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
-            cur.execute(exec_string)
+        dates = db_time_ranges[symbol]
+        date_start = None
+
+        if dates[0] == None:
+            result = cur.execute(exec_string).fetchall()[0][0]
+            date_start = helper.str_to_utc_datetime(
+                result, "UTC", DB_DATE_FORMAT)
+        else:
+            date_start = dates[0]
+
+        exec_string = f"{exec_string} DESC"
+        result = cur.execute(exec_string).fetchall()[0][0]
+        date_end = helper.str_to_utc_datetime(
+            result, "UTC", DB_DATE_FORMAT)
+
+        db_time_ranges[symbol] = (date_start, date_end)
+        print(
+            f"symbol:{symbol}, date_start: {date_start}, date_end: {date_end}")
     except Exception as ex:
-        logging.info('process_price_data_crypto: %s', ex)
+        logging.info('update_db_time_range: %s', ex)
     finally:
         sql_connection.commit()
         sql_connection.close()
 
 
+def get_lag_mins(symbol):
+    symbol_last_datetime = db_time_ranges[symbol][1].replace(
+        tzinfo=None)
+    lag = (datetime.datetime.utcnow() - symbol_last_datetime).total_seconds()
+
+    return int(lag / 60)
+
+
 def poll_symbols():
     while poll_work_flag:
+
         for symbol in symbol_api_mapping:
 
-            r = requests.get(symbol_api_mapping[symbol])
+            lag = get_lag_mins(symbol)
+            url = symbol_api_mapping[symbol]
+            if lag > api_extended_poll_threshold_min:
+                url = f"{url}&outputsize=full"
+
+            r = requests.get(url)
             content = r.text
             price_data = json.loads(content)
-            process_price_data(symbol, price_data)
+            process_price_data(symbol, price_data, False)
 
         for symbol in crypto_symbol_api_mapping:
+
+            lag = get_lag_mins(symbol) + 1
+            url = f"{crypto_symbol_api_mapping[symbol]}?limit={lag}"
             r = requests.get(crypto_symbol_api_mapping[symbol])
             content = r.text
             price_data = json.loads(content)
-            process_price_data_crypto(symbol, price_data)
+            process_price_data(symbol, price_data, True)
 
         poll_event.wait(poll_interval_sec)
         poll_event.clear()
@@ -234,6 +304,7 @@ def start_poll():
 
 
 if __name__ == "__main__":
+    update_db_time_ranges()
     start_poll()
     print("Press any key to exit")
     input()
