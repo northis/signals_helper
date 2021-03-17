@@ -34,7 +34,7 @@ class Symbol(str):
     USDCHF = "USDCHF"
     USDJPY = "USDJPY"
     USDRUB = "USDRUB"
-    XAGUSD = "XAGUSD"
+    # XAGUSD = "XAGUSD"
     XAUUSD = "XAUUSD"
 
 

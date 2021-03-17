@@ -28,9 +28,10 @@ FX_URL = f"{BASE_URL}&function=FX_INTRADAY"
 CRYPTO_URL = f"https://api-pub.bitfinex.com/v2/candles/trade:1m:"
 
 poll_work_flag = True
-poll_tread: Thread = None
+poll_thread: Thread = None
 poll_event = threading.Event()
 poll_interval_sec = 60 * 60
+poll_throttle_sec = 2 * 60
 api_extended_poll_threshold_min = 90
 
 commit_throttle = 1000000
@@ -44,7 +45,7 @@ symbol_api_mapping = {
     classes.Symbol.USDCHF: f"{FX_URL}&from_symbol=USD&to_symbol=CHF",
     classes.Symbol.USDJPY: f"{FX_URL}&from_symbol=USD&to_symbol=JPY",
     classes.Symbol.USDRUB: f"{FX_URL}&from_symbol=USD&to_symbol=RUB",
-    classes.Symbol.XAGUSD: f"{BASE_URL}&function=TIME_SERIES_INTRADAY&symbol=SILVER",
+    # classes.Symbol.XAGUSD: f"{BASE_URL}&function=TIME_SERIES_INTRADAY&symbol=SILVER",
     classes.Symbol.XAUUSD: f"{BASE_URL}&function=TIME_SERIES_INTRADAY&symbol=GOLD"
 }
 
@@ -61,7 +62,7 @@ db_time_ranges = {
     classes.Symbol.USDCHF: (None, None),
     classes.Symbol.USDJPY: (None, None),
     classes.Symbol.USDRUB: (None, None),
-    classes.Symbol.XAGUSD: (None, None),
+    # classes.Symbol.XAGUSD: (None, None),
     classes.Symbol.XAUUSD: (None, None)
 }
 
@@ -80,6 +81,8 @@ def import_csv(symbol, input_file):
     open_prev: decimal.Decimal = None
     rounded_min_datetime_prev: datetime.datetime = None
 
+    symbol_last_datetime = db_time_ranges[symbol][1]
+
     # parse ordered datetimes only. You can export them from MetaTrader
     for line in fileinput.input([input_file]):
 
@@ -96,7 +99,7 @@ def import_csv(symbol, input_file):
             date = helper.str_to_utc_datetime(
                 f'{array[0]}T{array[1]}', DT_INPUT_TIMEZONE, DT_INPUT_FORMAT)
 
-            if date == None:
+            if date == None or symbol_last_datetime > date:
                 continue
 
             rounded_min_datetime = date - \
@@ -143,37 +146,34 @@ def import_csv(symbol, input_file):
 def import_all_example():
     print("Importing...")
     import_csv(classes.Symbol.AUDUSD,
-               r"E:\AUDUSD_202001021000_202103122358.csv")
-
-    import_csv(classes.Symbol.BTCUSD,
-               r"E:\BTCUSD_202001021000_202103122057.csv")
+               r"E:\latest\AUDUSD_202103121800_202103172342.csv")
 
     import_csv(classes.Symbol.EURUSD,
-               r"E:\EURUSD_202001021000_202103122100.csv")
+               r"E:\latest\EURUSD_202103121800_202103172343.csv")
 
     import_csv(classes.Symbol.GBPUSD,
-               r"E:\GBPUSD_202001021000_202103122110.csv")
+               r"E:\latest\GBPUSD_202103121800_202103172343.csv")
 
     import_csv(classes.Symbol.NZDUSD,
-               r"E:\NZDUSD_202001021000_202103112355.csv")
+               r"E:\latest\NZDUSD_202103121800_202103172343.csv")
 
     import_csv(classes.Symbol.USDCAD,
-               r"E:\USDCAD_202001021000_202103122329.csv")
+               r"E:\latest\USDCAD_202103121800_202103172343.csv")
 
     import_csv(classes.Symbol.USDCHF,
-               r"E:\USDCHF_202001021000_202103122358.csv")
+               r"E:\latest\USDCHF_202103121800_202103172343.csv")
 
     import_csv(classes.Symbol.USDJPY,
-               r"E:\USDJPY_202001021000_202103122103.csv")
+               r"E:\latest\USDJPY_202103121800_202103172344.csv")
 
     import_csv(classes.Symbol.USDRUB,
-               r"E:\USDRUB_202001021000_202103121729.csv")
+               r"E:\latest\USDRUB_202103150900_202103171729.csv")
 
     import_csv(classes.Symbol.XAGUSD,
-               r"E:\XAGUSD_202001021000_202103122048.csv")
+               r"E:\latest\XAGUSD_202103121800_202103172254.csv")
 
     import_csv(classes.Symbol.XAUUSD,
-               r"E:\XAUUSD_202001021000_202103122043.csv")
+               r"E:\latest\XAUUSD_202103121800_202103172254.csv")
     print("Done")
 
 
@@ -199,7 +199,7 @@ def process_price_data(symbol, price_data, use_ctypto):
                 utc_date = helper.str_to_utc_datetime(
                     price_item, timezone, POLL_INPUT_FORMAT)
 
-            if symbol_last_datetime > utc_date:
+            if symbol_last_datetime.replace(tzinfo=None) > utc_date.replace(tzinfo=None):
                 continue
 
             utc_date_str = utc_date.strftime(DB_DATE_FORMAT)
@@ -253,12 +253,13 @@ def update_db_time_range(symbol):
             result, "UTC", DB_DATE_FORMAT)
 
         db_time_ranges[symbol] = (date_start, date_end)
-        print(
-            f"symbol:{symbol}, date_start: {date_start}, date_end: {date_end}")
+
+        dates = f"symbol:{symbol}, date_start: {date_start}, date_end: {date_end}"
+        print(dates)
+        logging.info(dates)
     except Exception as ex:
         logging.info('update_db_time_range: %s', ex)
     finally:
-        sql_connection.commit()
         sql_connection.close()
 
 
@@ -273,18 +274,6 @@ def get_lag_mins(symbol):
 def poll_symbols():
     while poll_work_flag:
 
-        for symbol in symbol_api_mapping:
-
-            lag = get_lag_mins(symbol)
-            url = symbol_api_mapping[symbol]
-            if lag > api_extended_poll_threshold_min:
-                url = f"{url}&outputsize=full"
-
-            r = requests.get(url)
-            content = r.text
-            price_data = json.loads(content)
-            process_price_data(symbol, price_data, False)
-
         for symbol in crypto_symbol_api_mapping:
 
             lag = get_lag_mins(symbol) + 1
@@ -294,20 +283,47 @@ def poll_symbols():
             price_data = json.loads(content)
             process_price_data(symbol, price_data, True)
 
-        poll_event.wait(poll_interval_sec)
+        for symbol in symbol_api_mapping:
+
+            lag = get_lag_mins(symbol)
+            url = symbol_api_mapping[symbol]
+            if lag > api_extended_poll_threshold_min:
+                url = f"{url}&outputsize=full"
+
+            try_request = True
+            while try_request:
+                try:
+                    r = requests.get(url)
+                    content = r.text
+                    price_data = json.loads(content)
+                    process_price_data(symbol, price_data, False)
+                    try_request = False
+                except Exception as ex:
+                    logging.info(
+                        'poll_symbols, symbol_api_mapping, symbol %s, error: %s', symbol, ex)
+                    poll_event.clear()
+                    poll_event.wait(poll_throttle_sec)
+
+            poll_event.clear()
+            poll_event.wait(poll_throttle_sec)
+
+        update_db_time_ranges()
         poll_event.clear()
+        poll_event.wait(poll_interval_sec)
 
 
 def start_poll():
-    poll_tread = Thread(target=poll_symbols, daemon=True)
-    poll_tread.start()
+    poll_thread = Thread(target=poll_symbols)
+    poll_thread.start()
 
 
 if __name__ == "__main__":
+
+    logging.basicConfig(filename='db_poll.log', encoding='utf-8',
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
     update_db_time_ranges()
     start_poll()
     print("Press any key to exit")
     input()
     poll_stop_flag = False
     poll_event.set()
-    poll_tread.join()
