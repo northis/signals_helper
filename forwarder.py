@@ -193,10 +193,11 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client, links):
 
             elif to_secondary_id != 0:
                 if join_channels:
+                    links_local = config.get_links()
                     for url in join_urls:
 
                         url_exists = False
-                        for link_url in links:
+                        for link_url in links_local:
                             if link_url == url:
                                 url_exists = True
                                 break
@@ -234,13 +235,13 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client, links):
                                     exist = False
                                     now = datetime.datetime.now(
                                         datetime.timezone.utc).isoformat()
-                                    for existed_link in links:
+                                    for existed_link in links_local:
                                         if existed_link['id'] == chat.id:
                                             if (existed_link['access_url'] != url) or (existed_link['name'] != chat.title):
                                                 existed_link['access_url'] = url
                                                 existed_link['name'] = chat.title
                                                 existed_link['change_date_utc'] = now
-                                            config.set_links(links)
+                                            config.set_links(links_local)
                                             exist = True
                                             break
                                     if exist:
@@ -258,11 +259,11 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client, links):
                                         chat = await client(ImportChatInviteRequest(invite_code))
                                         chat = chat.chats[0]
 
-                                        links.append(
+                                        links_local.append(
                                             {"id": chat.id, "access_url": url, "name": chat.title, "add_date_utc:": now, "change_date_utc:": now})
 
                                         print("Added %s " % chat.title)
-                                        config.set_links(links)
+                                        config.set_links(links_local)
                                         links = config.get_links()
                                         logging.info(
                                             'Just added to channel %s', chat.title)
