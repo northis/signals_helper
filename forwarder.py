@@ -25,10 +25,10 @@ api_id = os.getenv('api_id')
 api_hash = os.getenv('api_hash')
 forwards = main_config['forwards']
 join_channels = main_config['join_channels']
-links = None
+links_global = config.get_links()
 
 
-async def main_exec():
+async def main_exec(links):
     async with TelegramClient('secure_session.session', api_id, api_hash) as client:
         for forward in forwards:
             from_chat_id = forward['from_chat_id']
@@ -83,11 +83,12 @@ async def main_exec():
                             break
 
             config.set_config(main_config)
-            forward_exec(from_chat_id, to_primary_id, to_secondary_id, client)
+            forward_exec(from_chat_id, to_primary_id,
+                         to_secondary_id, client, links)
         await client.run_until_disconnected()
 
 
-def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
+def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client, links):
     @client.on(events.NewMessage(chats=(from_chat_id)))
     async def handler(event):
         message = event.message
@@ -307,5 +308,4 @@ def getInviteStringFromUrl(url):
 
 if __name__ == "__main__":
     print("Press Ctrl+C to exit...")
-    links = config.get_links()
-    asyncio.run(main_exec())
+    asyncio.run(main_exec(links_global))
