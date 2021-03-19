@@ -1,22 +1,16 @@
 import threading
-import time
 import sqlite3
 import fileinput
-import helper
-import pytz
 import datetime
 import decimal
 import os
-import classes
-import parsers
-from dotenv import load_dotenv
-from helper import get_array_item_contains_key
-import requests
-from time import sleep
-from threading import Thread
-import json
 import logging
+from threading import Thread
 from enum import Enum
+from dotenv import load_dotenv
+import classes
+import helper
+import parsers
 
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
@@ -24,13 +18,12 @@ DT_INPUT_TIMEZONE = "EET"
 DB_DATE_FORMAT = r"%Y-%m-%d %H:%M:%S+00:00"
 DB_PATH = os.getenv("db_path")
 
-poll_work_flag = True
+POLL_WORK_FLAG = True
 poll_thread: Thread = None
 poll_event = threading.Event()
-poll_interval_sec = 60 * 60
-poll_throttle_sec = 2 * 60
-
-commit_throttle = 1000000
+POLL_INTERVAL_SEC = 60 * 60
+POLL_THROTTLE_SEC = 2 * 60
+COMMIT_BATCH_ROW_COUNT = 1000000
 
 
 class AccessType(Enum):
@@ -79,14 +72,14 @@ def import_csv(symbol, input_file):
             continue
 
         bid = helper.str_to_decimal(array[2])
-        if bid == None:
+        if bid is None:
             continue
 
         try:
             date = helper.str_to_utc_datetime(
                 f'{array[0]}T{array[1]}', DT_INPUT_TIMEZONE, DT_INPUT_FORMAT)
 
-            if date == None or symbol_last_datetime > date:
+            if date is None or symbol_last_datetime > date:
                 continue
 
             rounded_min_datetime = date - \
@@ -114,7 +107,7 @@ def import_csv(symbol, input_file):
 
             cur.execute(exec_string)
             count += 1
-            if count % commit_throttle == 0:
+            if count % COMMIT_BATCH_ROW_COUNT == 0:
                 sql_connection.commit()
                 print("Count %s, symbol %s" % (count, symbol))
 
@@ -238,7 +231,7 @@ def update_db_time_range(symbol):
 
 
 def poll_symbols():
-    while poll_work_flag:
+    while POLL_WORK_FLAG:
 
         for symbol in parsers.investing_symbol_api_mapping:
             process_price_data(symbol, AccessType.investing)
@@ -257,14 +250,14 @@ def poll_symbols():
                     logging.info(
                         'poll_symbols, alphavantage, symbol %s, error: %s', symbol, ex)
                     poll_event.clear()
-                    poll_event.wait(poll_throttle_sec)
+                    poll_event.wait(POLL_THROTTLE_SEC)
 
             poll_event.clear()
-            poll_event.wait(poll_throttle_sec)
+            poll_event.wait(POLL_THROTTLE_SEC)
 
         update_db_time_ranges()
         poll_event.clear()
-        poll_event.wait(poll_interval_sec)
+        poll_event.wait(POLL_INTERVAL_SEC)
 
 
 def start_poll():
@@ -282,5 +275,5 @@ def main_exec():
 
 if __name__ == "__main__":
     helper.run_as_daemon_until_press_any_key(main_exec)
-    poll_work_flag = False
+    POLL_WORK_FLAG = False
     poll_event.set()

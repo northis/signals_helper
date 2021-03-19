@@ -1,10 +1,7 @@
-import sys
-import time
 import threading
 import datetime
-from datetime import timezone
-import pytz
 import decimal
+import pytz
 
 
 def str_to_utc_datetime(dt, timezone, input_format):
@@ -28,7 +25,7 @@ def str_to_utc_iso_datetime(dt, timezone, input_format):
 
 
 def str_to_decimal(string):
-    if string == None:
+    if string is None:
         return None
     try:
         dec = decimal.Decimal(string.replace(",", "."))
@@ -41,6 +38,7 @@ def get_array_item_contains_key(array, key):
     for item in array:
         if key.lower() in item.lower():
             return array[item]
+    return []
 
 
 def run_as_daemon_until_press_any_key(func_to_execute):

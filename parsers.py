@@ -1,19 +1,20 @@
-
-from helper import get_array_item_contains_key
+import os
 import datetime
 import json
 import requests
+from dotenv import load_dotenv
 import helper
 import classes
-from dotenv import load_dotenv
-# import os
+from helper import get_array_item_contains_key
 
-# load_dotenv()
-# API_KEY = os.getenv("api_key")
+
+load_dotenv()
+API_KEY = os.getenv("api_key")
+API_KEY_INVESTING = os.getenv("api_key_investing")
 
 POLL_INPUT_FORMAT = r"%Y-%m-%d %H:%M:%S"
 # BASE_URL = f"https://www.alphavantage.co/query?&interval=1min&apikey={API_KEY}"
-BASE_URL_INVESTING = f"https://tvc4.forexpros.com/1270d7a6a5310121309d3b1d552f18e9/0/0/0/0/history?resolution=1"
+BASE_URL_INVESTING = f"https://tvc4.forexpros.com/{API_KEY_INVESTING}/0/0/0/0/history?resolution=1"
 # FX_URL = f"{BASE_URL}&function=FX_INTRADAY"
 # CRYPTO_URL = f"https://api-pub.bitfinex.com/v2/candles/trade:1m:"
 
@@ -45,7 +46,7 @@ investing_symbol_api_mapping = {
     classes.Symbol.XAUUSD: f"{BASE_URL_INVESTING}&symbol=8830"}
 
 
-def get_lag_mins(symbol, symbol_last_datetime):
+def get_lag_mins(symbol_last_datetime):
     symbol_last_datetime = symbol_last_datetime.replace(tzinfo=None)
     lag = (datetime.datetime.utcnow() - symbol_last_datetime).total_seconds()
 
@@ -54,13 +55,13 @@ def get_lag_mins(symbol, symbol_last_datetime):
 
 def parse_alphavantage(symbol, symbol_last_datetime):
 
-    lag = get_lag_mins(symbol, symbol_last_datetime)
+    lag = get_lag_mins(symbol_last_datetime)
     url = symbol_api_mapping[symbol]
     if lag > api_extended_poll_threshold_min:
         url = f"{url}&outputsize=full"
 
-    r = requests.get(url)
-    content = r.text
+    req = requests.get(url)
+    content = req.text
     price_data = json.loads(content)
 
     meta = get_array_item_contains_key(price_data, "meta")
@@ -81,10 +82,10 @@ def parse_alphavantage(symbol, symbol_last_datetime):
 
 
 def parse_bitfinex(symbol, symbol_last_datetime):
-    lag = get_lag_mins(symbol, symbol_last_datetime) + 1
+    lag = get_lag_mins(symbol_last_datetime) + 1
     url = f"{crypto_symbol_api_mapping[symbol]}?limit={lag}"
-    r = requests.get(url)
-    content = r.text
+    req = requests.get(url)
+    content = req.text
     price_data = json.loads(content)
 
     for price_item in price_data:
@@ -105,8 +106,8 @@ def parse_investing(symbol, symbol_last_datetime):
     start_unix_dt = int(symbol_last_datetime.timestamp())
     end_unix_dt = int(datetime.datetime.now().timestamp())
     url = f"{investing_symbol_api_mapping[symbol]}&from={start_unix_dt}&to={end_unix_dt}"
-    r = requests.get(url, headers=investing_chrome_headers)
-    content = r.text
+    req = requests.get(url, headers=investing_chrome_headers)
+    content = req.text
     price_data = json.loads(content)
 
     times = price_data["t"]

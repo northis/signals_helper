@@ -1,4 +1,3 @@
-import json
 import config
 import re
 from classes import *
@@ -42,7 +41,7 @@ last_signal: SignalProps = None
 
 
 def str_to_utc_iso_datetime(dt):
-    return helper.str_to_utc_iso_datetime(dt, DT_INPUT_TIMEZONE,DT_INPUT_FORMAT)
+    return helper.str_to_utc_iso_datetime(dt, DT_INPUT_TIMEZONE, DT_INPUT_FORMAT)
 
 
 def string_to_signal(id: int, text: str, symbol_regex: str, date: str, reply_to: SignalProps):
