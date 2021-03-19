@@ -1,3 +1,6 @@
+import sys
+import time
+import threading
 import datetime
 from datetime import timezone
 import pytz
@@ -38,3 +41,10 @@ def get_array_item_contains_key(array, key):
     for item in array:
         if key.lower() in item.lower():
             return array[item]
+
+
+def run_as_daemon_until_press_any_key(func_to_execute):
+    exec_thread = threading.Thread(target=func_to_execute, daemon=True)
+    exec_thread.start()
+    print("Press any key to exit")
+    input()
