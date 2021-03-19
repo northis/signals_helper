@@ -8,6 +8,7 @@ import datetime
 import decimal
 import os
 import classes
+import parsers
 from dotenv import load_dotenv
 from helper import get_array_item_contains_key
 import requests
@@ -20,31 +21,14 @@ from enum import Enum
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
-POLL_INPUT_FORMAT = r"%Y-%m-%d %H:%M:%S"
 DB_DATE_FORMAT = r"%Y-%m-%d %H:%M:%S+00:00"
 DB_PATH = os.getenv("db_path")
-API_KEY = os.getenv("api_key")
-BASE_URL = f"https://www.alphavantage.co/query?&interval=1min&apikey={API_KEY}"
-BASE_URL_INVESTING = f"http://tvc4.forexpros.com/1270d7a6a5310121309d3b1d552f18e9/0/0/0/0/history?resolution=1"
-FX_URL = f"{BASE_URL}&function=FX_INTRADAY"
-CRYPTO_URL = f"https://api-pub.bitfinex.com/v2/candles/trade:1m:"
 
 poll_work_flag = True
 poll_thread: Thread = None
 poll_event = threading.Event()
 poll_interval_sec = 60 * 60
 poll_throttle_sec = 2 * 60
-api_extended_poll_threshold_min = 90
-
-investing_chrome_headers = {
-    "Cache-Control": "max-age=0",
-    "DNT": "1",
-    "Upgrade-Insecure-Requests": "1",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-    "Accept-Encoding": "gzip, deflate",
-    "Accept-Language": "ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7"
-}
 
 commit_throttle = 1000000
 
@@ -54,34 +38,6 @@ class AccessType(Enum):
     bitfinex = 1
     investing = 2
 
-
-symbol_api_mapping = {
-    classes.Symbol.AUDUSD: f"{FX_URL}&from_symbol=AUD&to_symbol=USD",
-    classes.Symbol.EURUSD: f"{FX_URL}&from_symbol=EUR&to_symbol=USD",
-    classes.Symbol.GBPUSD: f"{FX_URL}&from_symbol=GBP&to_symbol=USD",
-    classes.Symbol.NZDUSD: f"{FX_URL}&from_symbol=NZD&to_symbol=USD",
-    classes.Symbol.USDCAD: f"{FX_URL}&from_symbol=USD&to_symbol=CAD",
-    classes.Symbol.USDCHF: f"{FX_URL}&from_symbol=USD&to_symbol=CHF",
-    classes.Symbol.USDJPY: f"{FX_URL}&from_symbol=USD&to_symbol=JPY",
-    classes.Symbol.USDRUB: f"{FX_URL}&from_symbol=USD&to_symbol=RUB"
-}
-
-crypto_symbol_api_mapping = {
-    classes.Symbol.BTCUSD: f"{CRYPTO_URL}tBTCUSD/hist"}
-
-
-investing_symbol_api_mapping = {
-    classes.Symbol.AUDUSD: f"{BASE_URL_INVESTING}&symbol=5",
-    classes.Symbol.BTCUSD: f"{BASE_URL_INVESTING}&symbol=945629",
-    classes.Symbol.EURUSD: f"{BASE_URL_INVESTING}&symbol=1",
-    classes.Symbol.GBPUSD: f"{BASE_URL_INVESTING}&symbol=2",
-    classes.Symbol.NZDUSD: f"{BASE_URL_INVESTING}&symbol=8",
-    classes.Symbol.USDCAD: f"{BASE_URL_INVESTING}&symbol=7",
-    classes.Symbol.USDCHF: f"{BASE_URL_INVESTING}&symbol=4",
-    classes.Symbol.USDJPY: f"{BASE_URL_INVESTING}&symbol=3",
-    classes.Symbol.USDRUB: f"{BASE_URL_INVESTING}&symbol=2186",
-    classes.Symbol.XAGUSD: f"{BASE_URL_INVESTING}&symbol=8836",
-    classes.Symbol.XAUUSD: f"{BASE_URL_INVESTING}&symbol=8830"}
 
 db_time_ranges = {
     classes.Symbol.AUDUSD: (None, None),
@@ -208,73 +164,23 @@ def import_all_example():
     print("Done")
 
 
-def parse_alphavantage(price_data):
-    meta = get_array_item_contains_key(price_data, "meta")
-    timezone = get_array_item_contains_key(meta, "time zone")
-    price_data = get_array_item_contains_key(price_data, "series")
-    sorted_items = sorted(price_data.keys())
+def process_price_data(symbol, access_type):
+    symbol_last_datetime = db_time_ranges[symbol][1]
 
-    for price_item in sorted_items:
-        utc_date = helper.str_to_utc_datetime(
-            price_item, timezone, POLL_INPUT_FORMAT)
-
-        open_ = price_item[1]
-        close = price_item[2]
-        high = price_item[3]
-        low = price_item[4]
-
-        yield (utc_date, open_, high, low, close)
-
-
-def parse_bitfinex(price_data):
-    for price_item in price_data:
-        utc_date = datetime.datetime.utcfromtimestamp(
-            price_item[0] / 1000)
-
-        values = price_data[price_item]
-        open_ = get_array_item_contains_key(values, "open")
-        high = get_array_item_contains_key(values, "high")
-        low = get_array_item_contains_key(values, "low")
-        close = get_array_item_contains_key(values, "close")
-
-        yield (utc_date, open_, high, low, close)
-
-
-def parse_investing(price_data):
-    times = price_data["t"]
-    o_array = price_data["o"]
-    h_array = price_data["h"]
-    l_array = price_data["l"]
-    c_array = price_data["c"]
-
-    i = 0
-    for time in times:
-        utc_date = datetime.datetime.utcfromtimestamp(time)
-
-        open_ = o_array[i]
-        high = h_array[i]
-        low = l_array[i]
-        close = c_array[i]
-
-        i += 1
-        yield (utc_date, open_, high, low, close)
-
-
-def process_price_data(symbol, price_data, access_type):
     if access_type == AccessType.bitfinex:
-        sorted_items = parse_bitfinex(price_data)
+        sorted_items = parsers.parse_bitfinex(symbol, symbol_last_datetime)
 
     elif access_type == AccessType.alphavantage:
-        sorted_items = parse_alphavantage(price_data)
+        sorted_items = parsers.parse_alphavantage(symbol, symbol_last_datetime)
 
     elif access_type == AccessType.investing:
-        sorted_items = parse_investing(price_data)
+        sorted_items = parsers.parse_investing(
+            symbol, symbol_last_datetime)
     else:
         return
 
     sql_connection = sqlite3.connect(DB_PATH)
     cur = sql_connection.cursor()
-    symbol_last_datetime = db_time_ranges[symbol][1]
 
     try:
         for price_item in sorted_items:
@@ -331,60 +237,30 @@ def update_db_time_range(symbol):
         sql_connection.close()
 
 
-def get_lag_mins(symbol):
-    symbol_last_datetime = db_time_ranges[symbol][1].replace(
-        tzinfo=None)
-    lag = (datetime.datetime.utcnow() - symbol_last_datetime).total_seconds()
-
-    return int(lag / 60)
-
-
 def poll_symbols():
     while poll_work_flag:
 
-        for symbol in investing_symbol_api_mapping:
-            symbol_last_datetime = db_time_ranges[symbol][1]
-            start_unix_dt = int(symbol_last_datetime.timestamp())
-            end_unix_dt = int(datetime.datetime.now().timestamp())
-            url = f"{investing_symbol_api_mapping[symbol]}&from={start_unix_dt}&to={end_unix_dt}"
-            r = requests.get(url, headers=investing_chrome_headers)
-            content = r.text
-            price_data = json.loads(content)
-            process_price_data(symbol, price_data, AccessType.investing)
+        for symbol in parsers.investing_symbol_api_mapping:
+            process_price_data(symbol, AccessType.investing)
 
-        # for symbol in crypto_symbol_api_mapping:
+        for symbol in parsers.crypto_symbol_api_mapping:
+            process_price_data(symbol, AccessType.bitfinex)
 
-        #     lag = get_lag_mins(symbol) + 1
-        #     url = f"{crypto_symbol_api_mapping[symbol]}?limit={lag}"
-        #     r = requests.get(url)
-        #     content = r.text
-        #     price_data = json.loads(content)
-        #     process_price_data(symbol, price_data, AccessType.bitfinex)
+        for symbol in parsers.symbol_api_mapping:
+            try_request = True
+            while try_request:
+                try:
+                    # Naughty API, may behave badly sometimes
+                    process_price_data(symbol, AccessType.alphavantage)
+                    try_request = False
+                except Exception as ex:
+                    logging.info(
+                        'poll_symbols, alphavantage, symbol %s, error: %s', symbol, ex)
+                    poll_event.clear()
+                    poll_event.wait(poll_throttle_sec)
 
-        # for symbol in symbol_api_mapping:
-
-        #     lag = get_lag_mins(symbol)
-        #     url = symbol_api_mapping[symbol]
-        #     if lag > api_extended_poll_threshold_min:
-        #         url = f"{url}&outputsize=full"
-
-        #     try_request = True
-        #     while try_request:
-        #         try:
-        #             r = requests.get(url)
-        #             content = r.text
-        #             price_data = json.loads(content)
-        #             process_price_data(symbol, price_data,
-        #                                AccessType.alphavantage)
-        #             try_request = False
-        #         except Exception as ex:
-        #             logging.info(
-        #                 'poll_symbols, symbol_api_mapping, symbol %s, error: %s', symbol, ex)
-        #             poll_event.clear()
-        #             poll_event.wait(poll_throttle_sec)
-
-        #     poll_event.clear()
-        #     poll_event.wait(poll_throttle_sec)
+            poll_event.clear()
+            poll_event.wait(poll_throttle_sec)
 
         update_db_time_ranges()
         poll_event.clear()
