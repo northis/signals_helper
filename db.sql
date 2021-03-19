@@ -1,3 +1,5 @@
+-- sybmols.db
+
 CREATE TABLE "AUDUSD"
 (
 	"DateTime" DATETIME NOT NULL UNIQUE,
@@ -150,4 +152,20 @@ CREATE TABLE "XAUUSD"
 
 CREATE UNIQUE INDEX "XAUUSD_DateIndex" ON "XAUUSD" (
 	"DateTime"	DESC
+);
+
+-- stats.db
+CREATE TABLE "Channel"
+(
+	"Id" INTEGER NOT NULL UNIQUE,
+	"Name" TEXT NOT NULL,
+	"AccessLink" TEXT NOT NULL,
+	"CreateDate" DATETIME NOT NULL,
+	"UpdateDate" DATETIME,
+	PRIMARY KEY("Id")
+)
+
+
+CREATE UNIQUE INDEX "Channel_IdIndex" ON "Channel" (
+	"Id"	DESC
 );

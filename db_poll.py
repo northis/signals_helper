@@ -1,14 +1,17 @@
-import threading
-import sqlite3
-import fileinput
 import datetime
 import decimal
-import os
+import fileinput
 import logging
-from threading import Thread
+import os
+import sqlite3
+import threading
 from enum import Enum
+from threading import Thread
+
 from dotenv import load_dotenv
+
 import classes
+import config
 import helper
 import parsers
 
@@ -16,7 +19,8 @@ load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
 DB_DATE_FORMAT = r"%Y-%m-%d %H:%M:%S+00:00"
-DB_PATH = os.getenv("db_path")
+DB_SYMBOLS_PATH = os.getenv("db_symbols_path")
+DB_STATS_PATH = os.getenv("db_stats_path")
 
 POLL_WORK_FLAG = True
 poll_thread: Thread = None
@@ -52,7 +56,7 @@ timer: threading.Timer = None
 
 
 def import_csv(symbol, input_file):
-    sql_connection = sqlite3.connect(DB_PATH)
+    sql_connection = sqlite3.connect(DB_SYMBOLS_PATH)
     cur = sql_connection.cursor()
 
     count = 0
@@ -123,37 +127,40 @@ def import_csv(symbol, input_file):
     sql_connection.close()
 
 
+def import_json(input_file):
+    sql_connection = sqlite3.connect(DB_STATS_PATH)
+    cur = sql_connection.cursor()
+
+    json_array = config.get_json(input_file)
+
+    for link_item in json_array:
+        id_ = link_item["id"]
+        add_date_utc = link_item.get("add_date_utc")
+
+        if add_date_utc is None:
+            add_date_utc = link_item.get("add_date_utc:")
+            if add_date_utc is None:
+                add_date_utc = "NULL"
+
+        change_date_utc = link_item.get("change_date_utc")
+
+        if change_date_utc is None:
+            change_date_utc = link_item.get("change_date_utc:")
+            if change_date_utc is None:
+                change_date_utc = "NULL"
+
+        access_url = link_item["access_url"]
+        name = link_item["name"].replace("'", "''")
+        exec_string = f"INSERT INTO Channel VALUES ({id_},'{name}','{access_url}','{add_date_utc}','{change_date_utc}')"
+        cur.execute(exec_string)
+
+    sql_connection.commit()
+    sql_connection.close()
+
+
 def import_all_example():
     print("Importing...")
-    import_csv(classes.Symbol.AUDUSD,
-               r"E:\latest\AUDUSD_202103121800_202103172342.csv")
-
-    import_csv(classes.Symbol.EURUSD,
-               r"E:\latest\EURUSD_202103121800_202103172343.csv")
-
-    import_csv(classes.Symbol.GBPUSD,
-               r"E:\latest\GBPUSD_202103121800_202103172343.csv")
-
-    import_csv(classes.Symbol.NZDUSD,
-               r"E:\latest\NZDUSD_202103121800_202103172343.csv")
-
-    import_csv(classes.Symbol.USDCAD,
-               r"E:\latest\USDCAD_202103121800_202103172343.csv")
-
-    import_csv(classes.Symbol.USDCHF,
-               r"E:\latest\USDCHF_202103121800_202103172343.csv")
-
-    import_csv(classes.Symbol.USDJPY,
-               r"E:\latest\USDJPY_202103121800_202103172344.csv")
-
-    import_csv(classes.Symbol.USDRUB,
-               r"E:\latest\USDRUB_202103150900_202103171729.csv")
-
-    import_csv(classes.Symbol.XAGUSD,
-               r"E:\latest\XAGUSD_202103121800_202103172254.csv")
-
-    import_csv(classes.Symbol.XAUUSD,
-               r"E:\latest\XAUUSD_202103121800_202103172254.csv")
+    # import_csv(classes.Symbol.AUDUSD, r"E:\latest\AUDUSD_202103121800_202103172342.csv")
     print("Done")
 
 
@@ -172,7 +179,7 @@ def process_price_data(symbol, access_type):
     else:
         return
 
-    sql_connection = sqlite3.connect(DB_PATH)
+    sql_connection = sqlite3.connect(DB_SYMBOLS_PATH)
     cur = sql_connection.cursor()
 
     try:
@@ -198,7 +205,7 @@ def update_db_time_ranges():
 
 
 def update_db_time_range(symbol):
-    sql_connection = sqlite3.connect(DB_PATH)
+    sql_connection = sqlite3.connect(DB_SYMBOLS_PATH)
     cur = sql_connection.cursor()
     try:
         # Fill the DB first, this code thinks it will return something anyway

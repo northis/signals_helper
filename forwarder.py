@@ -1,13 +1,14 @@
-from telethon import TelegramClient, sync, events, tl, errors
-from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest
-from telethon.tl.functions.channels import GetMessagesRequest, JoinChannelRequest
-import config
 import os
-from dotenv import load_dotenv
 import asyncio
 import logging
 import re
 import datetime
+from dotenv import load_dotenv
+from telethon import TelegramClient, sync, events, tl, errors
+from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest
+from telethon.tl.functions.channels import GetMessagesRequest, JoinChannelRequest
+import config
+
 from datetime import timezone
 
 SIGNAL_REGEX = r"(buy)|(sell)"
@@ -28,67 +29,67 @@ join_channels = main_config['join_channels']
 links_global = config.get_links()
 
 
-async def main_exec(links):
+async def main_exec():
     async with TelegramClient('secure_session.session', api_id, api_hash) as client:
         for forward in forwards:
-            from_chat_id = forward['from_chat_id']
-            from_chat_title = forward['from_chat_title']
-            to_primary = forward['to_primary']
-
-            is_ready = False
-
-            if from_chat_id == 0:
-                async for dialog in client.iter_dialogs():
-                    if from_chat_title == dialog.title:
-                        from_chat_id = dialog.id
-                        forward['from_chat_id'] = from_chat_id
-                        logging.info('Adding from_chat_id %s' %
-                                     from_chat_id)
-                        is_ready = True
-                        break
-            else:
-                is_ready = True
-
-            if not is_ready:
-                logging.info('Cannot add forward source %s' % from_chat_title)
-                continue
-
-            if to_primary['id'] == 0:
-                is_ready = False
-                async for dialog in client.iter_dialogs():
-                    if to_primary['title'] == dialog.title:
-                        to_primary['id'] = dialog.id
-                        logging.info('Adding to_primary id %s' %
-                                     dialog.id)
-                        is_ready = True
-                        break
-
-            if not is_ready:
-                logging.info('Cannot add primary destination %s' %
-                             from_chat_title)
-                continue
-
-            to_secondary_id = 0
-            to_primary_id = to_primary['id']
-
-            if 'to_secondary' in forward:
-                to_secondary = forward['to_secondary']
-                to_secondary_id = to_secondary['id']
-                if to_secondary_id == 0:
-                    async for dialog in client.iter_dialogs():
-                        if to_secondary['title'] == dialog.title:
-                            to_secondary['id'] = dialog.id
-                            logging.info('Adding to_secondary id %s' %
-                                         dialog.id)
-                            break
-
-            config.set_config(main_config)
-            forward_exec(from_chat_id, to_primary_id,
-                         to_secondary_id, client, links)
+            await init_forward(forward, client)
         await client.run_until_disconnected()
 
 
-def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client, links):
+async def get_chat_id_by_name(client, name):
+    async for dialog in client.iter_dialogs():
+        if name == dialog.title:
+            logging.info('chat %s => %s' % (name, dialog.id))
+            return dialog.id
+    return 0
+
+
+async def init_forward(forward, client):
+    from_chat_id = forward['from_chat_id']
+    from_chat_title = forward['from_chat_title']
+    to_primary = forward['to_primary']
+
+    is_ready = False
+
+    if from_chat_id == 0:
+        from_chat_id = await get_chat_id_by_name(client, from_chat_title)
+        if from_chat_id != 0:
+            forward['from_chat_id'] = from_chat_id
+            is_ready = True
+    else:
+        is_ready = True
+
+    if not is_ready:
+        logging.info('Cannot add forward source %s' % from_chat_title)
+        return
+
+    if to_primary['id'] == 0:
+        is_ready = False
+        id_ = await get_chat_id_by_name(client, to_primary['title'])
+        if id_ != 0:
+            to_primary['id'] = id_
+            is_ready = True
+
+    if not is_ready:
+        logging.info('Cannot add primary destination %s' %
+                     from_chat_title)
+        return
+
+    to_secondary_id = 0
+    to_primary_id = to_primary['id']
+
+    if 'to_secondary' in forward:
+        to_secondary = forward['to_secondary']
+        to_secondary_id = to_secondary['id']
+        if to_secondary_id == 0:
+            to_secondary_id = await get_chat_id_by_name(client, to_secondary['title'])
+
+    config.set_config(main_config)
+    forward_exec(from_chat_id, to_primary_id,
+                 to_secondary_id, client)
+
+
+def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
     @client.on(events.NewMessage(chats=(from_chat_id)))
     async def handler(event):
         message = event.message
@@ -298,11 +299,11 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client, links):
 
 def getInviteStringFromUrl(url):
     search_link = re.search(INVITE_REGEX, url)
-    if search_link != None:
+    if search_link is not None:
         return (search_link.group(1), False)
 
     search_link = re.search(URL_REGEX, url)
-    if search_link == None:
+    if search_link is None:
         return None
     return (search_link.group(1), True)
 
