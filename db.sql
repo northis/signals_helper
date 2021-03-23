@@ -168,7 +168,6 @@ CREATE TABLE "Channel"
 	PRIMARY KEY("Id")
 )
 
-
 CREATE UNIQUE INDEX "Channel_IdIndex" ON "Channel" (
 	"Id"	DESC
 );

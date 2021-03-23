@@ -4,7 +4,6 @@ import threading
 import logging
 import os
 
-import config
 import helper
 
 DB_STATS_PATH = os.getenv("db_stats_path")
