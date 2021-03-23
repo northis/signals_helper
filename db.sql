@@ -1,4 +1,5 @@
 -- sybmols.db
+CREATE DATABASE "sybmols";
 
 CREATE TABLE "AUDUSD"
 (
@@ -155,6 +156,8 @@ CREATE UNIQUE INDEX "XAUUSD_DateIndex" ON "XAUUSD" (
 );
 
 -- stats.db
+CREATE DATABASE "stats";
+
 CREATE TABLE "Channel"
 (
 	"Id" INTEGER NOT NULL UNIQUE,
@@ -168,4 +171,21 @@ CREATE TABLE "Channel"
 
 CREATE UNIQUE INDEX "Channel_IdIndex" ON "Channel" (
 	"Id"	DESC
+);
+
+CREATE TABLE "ChannelMessageLink"
+(
+	"IdPrimary" INTEGER NOT NULL UNIQUE,
+	"IdMessage" INTEGER,
+	"IdChannel" INTEGER,
+	PRIMARY KEY("IdPrimary")
+);
+
+CREATE UNIQUE INDEX "ChannelMessageLink_IdMessageIndex" ON "ChannelMessageLink" (
+	"IdMessage"	ASC
+);
+
+CREATE UNIQUE INDEX "Channel_IdIndex" ON "ChannelMessageLink" (
+	"IdMessage"	ASC,
+	"IdChannel"	ASC
 );

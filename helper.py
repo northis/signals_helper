@@ -4,6 +4,12 @@ import decimal
 import pytz
 
 
+def datetime_to_utc_datetime(dt_typed):
+    tz_utc = pytz.timezone("UTC")
+    dt_typed = dt_typed.astimezone(tz_utc)
+    return dt_typed
+
+
 def str_to_utc_datetime(dt, timezone, input_format):
     tz1 = pytz.timezone(timezone)
     tz2 = pytz.timezone("UTC")

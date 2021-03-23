@@ -18,12 +18,10 @@ import parsers
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
-DB_DATE_FORMAT = r"%Y-%m-%d %H:%M:%S+00:00"
 DB_SYMBOLS_PATH = os.getenv("db_symbols_path")
 DB_STATS_PATH = os.getenv("db_stats_path")
 
 POLL_WORK_FLAG = True
-poll_thread: Thread = None
 poll_event = threading.Event()
 POLL_INTERVAL_SEC = 60 * 60
 POLL_THROTTLE_SEC = 2 * 60
@@ -188,7 +186,7 @@ def process_price_data(symbol, access_type):
             if symbol_last_datetime.replace(tzinfo=None) > utc_date.replace(tzinfo=None):
                 continue
 
-            utc_date_str = utc_date.strftime(DB_DATE_FORMAT)
+            utc_date_str = utc_date.strftime(config.DB_DATE_FORMAT)
 
             exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date_str}',{price_item[1]},{price_item[2]},{price_item[3]},{price_item[4]}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
             cur.execute(exec_string)
@@ -214,17 +212,17 @@ def update_db_time_range(symbol):
         dates = db_time_ranges[symbol]
         date_start = None
 
-        if dates[0] == None:
+        if dates[0] is None:
             result = cur.execute(exec_string).fetchall()[0][0]
             date_start = helper.str_to_utc_datetime(
-                result, "UTC", DB_DATE_FORMAT)
+                result, "UTC", config.DB_DATE_FORMAT)
         else:
             date_start = dates[0]
 
         exec_string = f"{exec_string} DESC"
         result = cur.execute(exec_string).fetchall()[0][0]
         date_end = helper.str_to_utc_datetime(
-            result, "UTC", DB_DATE_FORMAT)
+            result, "UTC", config.DB_DATE_FORMAT)
 
         db_time_ranges[symbol] = (date_start, date_end)
 

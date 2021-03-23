@@ -1,5 +1,7 @@
 import json
 
+DB_DATE_FORMAT = r"%Y-%m-%d %H:%M:%S+00:00"
+
 
 def get_json(file):
     with open(file, 'r', encoding="utf-8") as f:
