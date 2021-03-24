@@ -48,6 +48,39 @@ def set_primary_message_id(id_primary, id_message, id_channel):
         sql_connection.close()
 
 
+def get_db_safe_title(title):
+    return str(title).replace("'", "''")
+
+
+def has_channel(access_url, title):
+    if access_url is None and title is None:
+        return None
+
+    sql_connection = sqlite3.connect(DB_STATS_PATH)
+    cur = sql_connection.cursor()
+    try:
+
+        select_str = "SELECT Id From Channel WHERE"
+        if title is None:
+            exec_string = f"{select_str} AccessLink = {access_url}"
+        elif access_url is None:
+            exec_string = f"{select_str} Name = {get_db_safe_title(title)}"
+        else:
+            exec_string = f"{select_str} AccessLink = {access_url} AND Name = {get_db_safe_title(title)}"
+
+        result = cur.execute(exec_string)
+
+        if result is None:
+            return None
+
+        return result.fetchone()
+    except Exception as ex:
+        logging.info('has_channel: %s', ex)
+        return None
+    finally:
+        sql_connection.close()
+
+
 def upsert_channel(id_, access_url, title):
     sql_connection = sqlite3.connect(DB_STATS_PATH)
     cur = sql_connection.cursor()
@@ -56,7 +89,7 @@ def upsert_channel(id_, access_url, title):
 
         lock.acquire()
         result = cur.execute(exec_string)
-        title_safe = str(title).replace("'", "")
+        title_safe = get_db_safe_title(title)
         now_str = helper.datetime_to_utc_datetime(
             datetime.datetime.utcnow()).isoformat()
         select_channel = result.fetchone()

@@ -1,6 +1,7 @@
 import json
 
 DB_DATE_FORMAT = r"%Y-%m-%d %H:%M:%S+00:00"
+SESSION_FILE = 'secure_session.session'
 
 
 def get_json(file):

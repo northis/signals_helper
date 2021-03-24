@@ -18,7 +18,6 @@ DT_INPUT_TIMEZONE = "EET"
 DB_SYMBOLS_PATH = os.getenv("db_symbols_path")
 DB_STATS_PATH = os.getenv("db_stats_path")
 
-POLL_WORK_FLAG = True
 poll_event = threading.Event()
 POLL_INTERVAL_SEC = 60 * 60
 POLL_THROTTLE_SEC = 2 * 60
@@ -122,8 +121,8 @@ def update_db_time_range(symbol):
         sql_connection.close()
 
 
-def poll_symbols():
-    while POLL_WORK_FLAG:
+def poll_symbols(signal_event: threading.Event):
+    while not signal_event.is_set():
 
         for symbol in parsers.investing_symbol_api_mapping:
             process_price_data(symbol, AccessType.investing)
@@ -152,20 +151,12 @@ def poll_symbols():
         poll_event.wait(POLL_INTERVAL_SEC)
 
 
-def start_poll():
-    poll_thread = Thread(target=poll_symbols)
-    poll_thread.start()
-
-
-def main_exec():
+def main_exec(wait_event: threading.Event):
 
     logging.basicConfig(filename='db_poll.log', encoding='utf-8',
                         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
     update_db_time_ranges()
-    start_poll()
-
-
-if __name__ == "__main__":
-    helper.run_as_daemon_until_press_any_key(main_exec)
-    POLL_WORK_FLAG = False
+    poll_thread = Thread(target=poll_symbols, args=[wait_event])
+    poll_thread.start()
+    wait_event.wait()
     poll_event.set()

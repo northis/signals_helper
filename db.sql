@@ -172,6 +172,14 @@ CREATE UNIQUE INDEX "Channel_IdIndex" ON "Channel" (
 	"Id"	DESC
 );
 
+CREATE UNIQUE INDEX "Channel_NameIndex" ON "Channel" (
+	"Name" ASC
+);
+
+CREATE UNIQUE INDEX "Channel_AccessLinkIndex" ON "Channel" (
+	"AccessLink" ASC
+);
+
 CREATE TABLE "ChannelMessageLink"
 (
 	"IdPrimary" INTEGER NOT NULL UNIQUE,

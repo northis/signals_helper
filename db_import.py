@@ -123,3 +123,7 @@ def import_all_example():
     print("Importing...")
     # import_csv(classes.Symbol.AUDUSD, r"E:\latest\AUDUSD_202103121800_202103172342.csv")
     print("Done")
+
+
+if __name__ == "__main__":
+    import_json("links.json")
