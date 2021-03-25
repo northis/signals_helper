@@ -1,13 +1,62 @@
+import asyncio
 import datetime
 import sqlite3
 import threading
 import logging
 import os
+from telethon import TelegramClient, errors
+import config
 
 import helper
 
 DB_STATS_PATH = os.getenv("db_stats_path")
 lock = threading.Lock()
+CHANNELS_HISTORY_DIR = os.getenv("channels_history_dir")
+api_id = os.getenv('api_id')
+api_hash = os.getenv('api_hash')
+
+
+async def download_history():
+
+    sql_connection = sqlite3.connect(DB_STATS_PATH)
+    cur = sql_connection.cursor()
+    try:
+
+        exec_string = "SELECT Id FROM Channel WHERE HistoryLoaded IS NULL OR HistoryLoaded <> 1"
+        channels = cur.execute(exec_string).fetchall()
+        async with TelegramClient(config.SESSION_FILE, api_id, api_hash) as client:
+            for channel_item in channels:
+                channel_id = channel_item[0]
+                channel = None
+                async for dialog in client.iter_dialogs():
+                    if dialog.entity.id == channel_id:
+                        channel = dialog
+                        break
+                if channel is None:
+                    logging.info('Channel id: %s, join requred', channel_id)
+                    # TODO add join here if needed
+                    continue
+
+                messages_list = list()
+
+                messages = await client.get_messages(channel, None)
+                for message in messages:
+                    messages_list.append(message.to_dict()['message'])
+
+                out_path = os.path.join(
+                    CHANNELS_HISTORY_DIR, f"{channel_id}.json")
+                config.set_json(out_path, messages_list)
+                # Object of type Message is not JSON serializable
+                await asyncio.sleep(10)
+
+    except Exception as ex:
+        logging.info('download_history: %s', ex)
+    finally:
+        sql_connection.close()
+
+
+def download_history_sync():
+    asyncio.run(download_history())
 
 
 def get_primary_message_id(id_message, id_channel):
@@ -62,11 +111,11 @@ def has_channel(access_url, title):
 
         select_str = "SELECT Id From Channel WHERE"
         if title is None:
-            exec_string = f"{select_str} AccessLink = {access_url}"
+            exec_string = f"{select_str} AccessLink = '{access_url}'"
         elif access_url is None:
-            exec_string = f"{select_str} Name = {get_db_safe_title(title)}"
+            exec_string = f"{select_str} Name = '{get_db_safe_title(title)}'"
         else:
-            exec_string = f"{select_str} AccessLink = {access_url} AND Name = {get_db_safe_title(title)}"
+            exec_string = f"{select_str} AccessLink = '{access_url}' AND Name = '{get_db_safe_title(title)}'"
 
         result = cur.execute(exec_string)
 
@@ -118,6 +167,7 @@ def upsert_channel(id_, access_url, title):
 
 
 if __name__ == "__main__":
-    res1 = set_primary_message_id(1, 1, 1)
-    res2 = get_primary_message_id(1, 1)
-    res3 = get_primary_message_id(1, 2)
+    download_history_sync()
+    # res1 = set_primary_message_id(1, 1, 1)
+    # res2 = get_primary_message_id(1, 1)
+    # res3 = get_primary_message_id(1, 2)

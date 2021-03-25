@@ -165,6 +165,8 @@ CREATE TABLE "Channel"
 	"AccessLink" TEXT NOT NULL,
 	"CreateDate" DATETIME NOT NULL,
 	"UpdateDate" DATETIME,
+	"HistoryLoaded" INTEGER,
+	"HistoryUpdateDate" DATETIME,
 	PRIMARY KEY("Id")
 )
 

@@ -7,16 +7,14 @@ from telethon import TelegramClient, sync, events, tl, errors
 from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest
 from telethon.tl.functions.channels import GetMessagesRequest, JoinChannelRequest
 import config
+import classes
 import db_stats
 
 SIGNAL_REGEX = r"(buy)|(sell)"
 LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
+
 INVITE_REGEX = r"joinchat/(.+)"
 URL_REGEX = r"t.me/(.+)"
-
-logging.basicConfig(filename='forwarder.log', encoding='utf-8', format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
-
 
 load_dotenv()
 main_config = config.get_config()
@@ -31,12 +29,16 @@ def message_to_str(message):
     return str(message.to_dict()['message'])
 
 
-async def main_exec(clients_list: list):
+async def main_exec(stop_flag: classes.StopFlag):
     async with TelegramClient(config.SESSION_FILE, api_id, api_hash) as client:
         for forward in forwards:
             await init_forward(forward, client)
-        clients_list.append(client)
-        await client.run_until_disconnected()
+
+        while True:
+            await asyncio.sleep(10)
+            if stop_flag.Value == True:
+                break
+        await client.disconnect()
 
 
 async def get_chat_id_by_name(client, name):
@@ -139,15 +141,10 @@ async def define_urls(message):
     return (is_primary, join_urls, reply)
 
 
-async def join_links(url, client):
-    url_exists = db_stats.has_channel(url, None) is not None
-    if url_exists:
-        logging.info('Already exists url %s', url)
-        return
-
+async def join_link(url, client):
     invite_code_typle = get_invite_string_from_url(url)
     if invite_code_typle is None:
-        return
+        return None
 
     invite_code = invite_code_typle[0]
     is_public = invite_code_typle[1]
@@ -168,7 +165,7 @@ async def join_links(url, client):
 
         if chat is None:
             logging.info('Cannot find right channel for %s', invite_code)
-            return
+            return None
 
         upsert_res = db_stats.upsert_channel(chat.id, url, chat.title)
         exist = upsert_res[4] is not None
@@ -184,32 +181,27 @@ async def join_links(url, client):
 
         if not need_to_add:
             logging.info('Already in channel %s', chat.title)
-            return
+            return chat
 
         chat = await client(ImportChatInviteRequest(invite_code))
         chat = chat.chats[0]
         logging.info('Just added to channel %s', chat.title)
+        return chat
 
     except Exception as err_chat:
         logging.info(
             'Cannot add by code %s: error:%s', invite_code, str(err_chat))
+        return None
 
 
 async def forward_primary(to_primary_id, message, reply, client: TelegramClient):
-    message_text = message_to_str(message)
-    reply_text: str = None
     primary_reply_outer = None
     if message.is_reply:
-        reply_text = message_to_str(reply)
-
         saved_reply_id = db_stats.get_primary_message_id(
             reply.id, reply.chat.id)
 
         if saved_reply_id is None:
-            async for primary_reply in client.iter_messages(
-                    to_primary_id, from_user=reply.chat.id, search=reply_text):
-                primary_reply_outer = primary_reply
-                break
+            primary_reply_outer = await client.forward_messages(to_primary_id, reply)
         else:
             primary_reply_outer = await client.get_messages(
                 to_primary_id, saved_reply_id)
@@ -217,19 +209,11 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
         logging.info(
             'Forwarded to reply to primary (reply id = %s, message id = %s)', reply.id, message.id)
 
-    if primary_reply_outer is None:
-        if reply_text is None:
-            message_forwarded = await client.forward_messages(to_primary_id, message)
-            db_stats.set_primary_message_id(
-                message_forwarded.id_message, message.id, message.chat.id)
-            logging.info('Forwarding to primary (id = %s)', message.id)
-            return
-
-        ready_message = "`" + reply_text + "`\n" + \
-            message_text + "\n\n" + message.chat.title
-        await client.send_message(to_primary_id, ready_message)
-        logging.info(
-            'Replying missed message to primary (id = %s)', message.id)
+    else:
+        message_forwarded = await client.forward_messages(to_primary_id, message)
+        db_stats.set_primary_message_id(
+            message_forwarded.id, message.id, message.chat.id)
+        logging.info('Forwarding to primary (id = %s)', message.id)
         return
 
     await client.send_message(to_primary_id, message, reply_to=primary_reply_outer)
@@ -272,7 +256,11 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
         elif to_secondary_id != 0:
             if join_channels:
                 for url in join_urls:
-                    await join_links(url, client)
+                    url_exists = db_stats.has_channel(url, None) is not None
+                    if url_exists:
+                        logging.info('Already exists url %s', url)
+                        continue
+                    await join_link(url, client)
 
             if len(join_urls) > 0:
                 await client.forward_messages(to_secondary_id, message)

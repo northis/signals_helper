@@ -46,6 +46,10 @@ class RobotCommand(str):
     SET_TP = "set_tp"
 
 
+class StopFlag:
+    Value = False
+
+
 @auto_attr_check
 class MessageProps(object):
     id = int
