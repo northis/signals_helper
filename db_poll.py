@@ -21,6 +21,7 @@ DB_STATS_PATH = os.getenv("db_stats_path")
 poll_event = threading.Event()
 POLL_INTERVAL_SEC = 60 * 60
 POLL_THROTTLE_SEC = 2 * 60
+lock = threading.Lock()
 
 
 class AccessType(Enum):
@@ -63,10 +64,7 @@ def process_price_data(symbol, access_type):
     else:
         return
 
-    sql_connection = sqlite3.connect(DB_SYMBOLS_PATH)
-    cur = sql_connection.cursor()
-
-    try:
+    with classes.SQLite(DB_SYMBOLS_PATH, 'process_price_data:', lock) as cur:
         for price_item in sorted_items:
             utc_date = price_item[0]
             if symbol_last_datetime.replace(tzinfo=None) > utc_date.replace(tzinfo=None):
@@ -76,11 +74,6 @@ def process_price_data(symbol, access_type):
 
             exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date_str}',{price_item[1]},{price_item[2]},{price_item[3]},{price_item[4]}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
             cur.execute(exec_string)
-    except Exception as ex:
-        logging.info('process_price_data: %s', ex)
-    finally:
-        sql_connection.commit()
-        sql_connection.close()
 
 
 def update_db_time_ranges():
@@ -89,9 +82,7 @@ def update_db_time_ranges():
 
 
 def update_db_time_range(symbol):
-    sql_connection = sqlite3.connect(DB_SYMBOLS_PATH)
-    cur = sql_connection.cursor()
-    try:
+    with classes.SQLite(DB_SYMBOLS_PATH, 'update_db_time_range:', None) as cur:
         # Fill the DB first, this code thinks it will return something anyway
         exec_string = f"SELECT [DateTime] From {symbol} ORDER BY [DateTime]"
 
@@ -99,14 +90,14 @@ def update_db_time_range(symbol):
         date_start = None
 
         if dates[0] is None:
-            result = cur.execute(exec_string).fetchall()[0][0]
+            result = cur.execute(exec_string).fetchone()[0]
             date_start = helper.str_to_utc_datetime(
                 result, "UTC", config.DB_DATE_FORMAT)
         else:
             date_start = dates[0]
 
         exec_string = f"{exec_string} DESC"
-        result = cur.execute(exec_string).fetchall()[0][0]
+        result = cur.execute(exec_string).fetchone()[0]
         date_end = helper.str_to_utc_datetime(
             result, "UTC", config.DB_DATE_FORMAT)
 
@@ -115,10 +106,6 @@ def update_db_time_range(symbol):
         dates = f"symbol:{symbol}, date_start: {date_start}, date_end: {date_end}"
         print(dates)
         logging.info(dates)
-    except Exception as ex:
-        logging.info('update_db_time_range: %s', ex)
-    finally:
-        sql_connection.close()
 
 
 def poll_symbols(signal_event: threading.Event):
@@ -147,14 +134,12 @@ def poll_symbols(signal_event: threading.Event):
             poll_event.wait(POLL_THROTTLE_SEC)
 
         update_db_time_ranges()
+
         poll_event.clear()
         poll_event.wait(POLL_INTERVAL_SEC)
 
 
 def main_exec(wait_event: threading.Event):
-
-    logging.basicConfig(filename='db_poll.log', encoding='utf-8',
-                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
     update_db_time_ranges()
     poll_thread = Thread(target=poll_symbols, args=[wait_event])
     poll_thread.start()

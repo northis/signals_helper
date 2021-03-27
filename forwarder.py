@@ -1,5 +1,4 @@
 import os
-import asyncio
 import logging
 import re
 from dotenv import load_dotenv
@@ -30,14 +29,11 @@ def message_to_str(message):
 
 
 async def main_exec(stop_flag: classes.StopFlag):
-    async with TelegramClient(config.SESSION_FILE, api_id, api_hash) as client:
+    async with TelegramClient(config.SESSION_HISTORY_FILE, api_id, api_hash) as client:
         for forward in forwards:
             await init_forward(forward, client)
 
-        while True:
-            await asyncio.sleep(10)
-            if stop_flag.Value == True:
-                break
+        await stop_flag.wait()
         await client.disconnect()
 
 
@@ -46,6 +42,13 @@ async def get_chat_id_by_name(client, name):
         if name == dialog.title:
             logging.info('chat %s => %s', name, dialog.id)
             return dialog.id
+    return 0
+
+
+async def get_chat_by_id(client, id_):
+    async for dialog in client.iter_dialogs():
+        if id_ == dialog.id:
+            return dialog
     return 0
 
 
@@ -203,8 +206,8 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
         if saved_reply_id is None:
             primary_reply_outer = await client.forward_messages(to_primary_id, reply)
         else:
-            primary_reply_outer = await client.get_messages(
-                to_primary_id, saved_reply_id)
+            chat = await get_chat_by_id(client, to_primary_id)
+            primary_reply_outer = await client.get_messages(chat, ids=saved_reply_id)
 
         logging.info(
             'Forwarded to reply to primary (reply id = %s, message id = %s)', reply.id, message.id)
@@ -216,7 +219,10 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
         logging.info('Forwarding to primary (id = %s)', message.id)
         return
 
-    await client.send_message(to_primary_id, message, reply_to=primary_reply_outer)
+    message_sent = await client.send_message(
+        to_primary_id, message, reply_to=primary_reply_outer)
+    db_stats.set_primary_message_id(
+        message_sent.id, message.id, message.chat.id)
     logging.info('Replying to primary (id = %s)', message.id)
 
 
@@ -255,7 +261,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
             await forward_primary(to_primary_id, message, reply, client)
         elif to_secondary_id != 0:
             if join_channels:
-                for url in join_urls:
+                for url in set(join_urls):
                     url_exists = db_stats.has_channel(url, None) is not None
                     if url_exists:
                         logging.info('Already exists url %s', url)

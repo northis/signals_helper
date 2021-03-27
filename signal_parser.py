@@ -19,8 +19,6 @@ SL_HIT_REGEX = r"(sl)|(stoplos[s]?).*hit"
 TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"buy"
-DT_INPUT_FORMAT = r"%Y-%m-%dT%H:%M:%S"
-DT_INPUT_TIMEZONE = "Europe/Moscow"
 
 signals: typing.Dict[int, SignalProps] = dict()
 signal_robot = list()
@@ -41,13 +39,13 @@ last_signal: SignalProps = None
 
 
 def str_to_utc_iso_datetime(dt):
-    return helper.str_to_utc_iso_datetime(dt, DT_INPUT_TIMEZONE, DT_INPUT_FORMAT)
+    return helper.str_to_utc_iso_datetime(dt, config.DT_INPUT_TIMEZONE, config.DT_INPUT_FORMAT)
 
 
 def string_to_signal(id: int, text: str, symbol_regex: str, date: str, reply_to: SignalProps):
     signal = SignalProps()
     signal.is_buy = re.match(BUY_REGEX, text) != None
-    signal.datetime_utc = str_to_utc_iso_datetime(date)
+    signal.date = str_to_utc_iso_datetime(date)
 
     symbol_search = re.search(symbol_regex, text)
     signal_search = re.search(SIGNAL_REGEX, text)
@@ -97,9 +95,9 @@ def string_to_signal(id: int, text: str, symbol_regex: str, date: str, reply_to:
     if is_reply:
         reply_message = MessageProps()
         reply_message.id = id
-        reply_message.id_ref = reply_to.id
+        reply_message.reply_to_message_id = reply_to.id
         reply_message.text = text
-        reply_message.datetime_utc = signal.datetime_utc
+        reply_message.date = signal.date
 
         if is_breakeven:
             reply_to.move_sl_to_entry = reply_message
@@ -124,11 +122,11 @@ def string_to_signal(id: int, text: str, symbol_regex: str, date: str, reply_to:
 
 
 def message_to_text(message):
-    if message == None:
+    if message is None:
         return None
 
     raw_text = message.get("text")
-    if raw_text == None:
+    if raw_text is None:
         return None
 
     text = str(raw_text).lower()
@@ -160,7 +158,7 @@ def process_message(message, out_file, symbol_regex):
     signals[id] = local_signal
     command = ""
     price = ""
-    signal_string = f'id:{id}\tdate:{local_signal.datetime_utc}\tcmd:{command}\tvalue:{price}'
+    signal_string = f'id:{id}\tdate:{local_signal.date}\tcmd:{command}\tvalue:{price}'
     signal_robot.append(signal_string)
 
 

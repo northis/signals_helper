@@ -4,6 +4,12 @@ import decimal
 import pytz
 
 
+def get_now_utc_iso():
+    now_str = datetime_to_utc_datetime(
+        datetime.datetime.utcnow()).isoformat()
+    return now_str
+
+
 def datetime_to_utc_datetime(dt_typed):
     tz_utc = pytz.timezone("UTC")
     dt_typed = dt_typed.astimezone(tz_utc)

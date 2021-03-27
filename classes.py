@@ -1,5 +1,8 @@
 from decimal import *
 import typing
+import asyncio
+import sqlite3
+import logging
 
 
 def getter_setter_gen(name, type_):
@@ -48,13 +51,20 @@ class RobotCommand(str):
 
 class StopFlag:
     Value = False
+    Sleep = 10
+
+    async def wait(self):
+        while True:
+            await asyncio.sleep(self.Sleep)
+            if self.Value is True:
+                break
 
 
 @auto_attr_check
 class MessageProps(object):
     id = int
-    id_ref = int
-    datetime_utc = str
+    reply_to_message_id = int
+    date = str
     text = str
     price = Decimal
 
@@ -67,9 +77,35 @@ class SignalProps(object):
     price = Decimal
     take_profits = typing.List[Decimal]
     stop_loss = Decimal
-    datetime_utc = str
+    date = str
     move_sl_to_entry = MessageProps
     tp_hit = typing.List[MessageProps]
     move_sl_to_profit = typing.List[MessageProps]
     sl_hit = MessageProps
     exit = MessageProps
+
+
+class SQLite():
+    def __init__(self, file, method_name, lock_object):
+        self.conn = sqlite3.connect(file)
+        self.method_name = method_name
+        self.lock_object = lock_object
+
+    def __enter__(self):
+        if self.lock_object is not None:
+            self.lock_object.acquire()
+
+        return self.conn.cursor()
+
+    def __exit__(self, ex_typ, e_val, trcbak):
+        try:
+            if self.lock_object is not None:
+                self.conn.commit()
+                self.conn.close()
+                self.lock_object.release()
+        except Exception as ex:
+            logging.info('%s: %s', self.method_name, ex)
+
+        if e_val is not None:
+            logging.info('%s: %s', self.method_name, e_val)
+        return True

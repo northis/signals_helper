@@ -167,6 +167,8 @@ CREATE TABLE "Channel"
 	"UpdateDate" DATETIME,
 	"HistoryLoaded" INTEGER,
 	"HistoryUpdateDate" DATETIME,
+	"HistoryAnalyzed" INTEGER,
+	"HistoryAnalysisUpdateDate" DATETIME,
 	PRIMARY KEY("Id")
 )
 
