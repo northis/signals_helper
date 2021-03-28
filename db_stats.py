@@ -34,8 +34,22 @@ async def process_history(wait_event: threading.Event):
         wait_event.wait(STATS_COLLECT_SEC)
 
 
+async def analyze_channel(wait_event: threading.Event, channel_id):
+
+    out_path = os.path.join(CHANNELS_HISTORY_DIR, f"{channel_id}.json")
+    messages = config.get_json(out_path)
+    for message in messages:
+        print(message)
+
+
 async def analyze_history(wait_event: threading.Event):
-    exec_string = "SELECT Id FROM Channel WHERE HistoryAnalyzed IS NULL OR HistoryAnalyzed <> 1"
+    exec_string = "SELECT Id FROM Channel WHERE HistoryAnalyzed = 1"
+    channels_ids = None
+    with classes.SQLite(DB_STATS_PATH, 'download_history, db:', None) as cur:
+        channels_ids = cur.execute(exec_string).fetchall()
+
+    for channel_id in channels_ids:
+        await analyze_channel(wait_event, channel_id)
 
 
 async def download_history(wait_event: threading.Event):
