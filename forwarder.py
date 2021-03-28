@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 import re
 from dotenv import load_dotenv
 from telethon import TelegramClient, sync, events, tl, errors
@@ -38,11 +39,18 @@ async def main_exec(stop_flag: classes.StopFlag):
 
 
 async def get_chat_id_by_name(client, name):
+    chat = await get_chat_by_name(client, name)
+    if chat is None:
+        return 0
+    return chat.id
+
+
+async def get_chat_by_name(client, name):
     async for dialog in client.iter_dialogs():
         if name == dialog.title:
             logging.info('chat %s => %s', name, dialog.id)
-            return dialog.id
-    return 0
+            return dialog
+    return None
 
 
 async def get_chat_by_id(client, id_):
@@ -144,7 +152,15 @@ async def define_urls(message):
     return (is_primary, join_urls, reply)
 
 
+async def get_in_channel(id_channel, client):
+    async for dialog in client.iter_dialogs():
+        if dialog.entity.id == id_channel:
+            return dialog
+    return None
+
+
 async def join_link(url, client):
+    channel_id = db_stats.get_channel(url, None)
     invite_code_typle = get_invite_string_from_url(url)
     if invite_code_typle is None:
         return None
@@ -158,37 +174,33 @@ async def join_link(url, client):
             result = await client(JoinChannelRequest(invite_code))
         else:
             result = await client(CheckChatInviteRequest(hash=invite_code))
-        need_to_add = True
+
         chat = None
         if hasattr(result, 'chat'):
             chat = result.chat
         elif hasattr(result, 'chats'):
-            need_to_add = False
             chat = result.chats[0]
 
+        if channel_id is not None:
+            logging.info('Already in channel %s', result.title)
+            upsert_res = db_stats.upsert_channel(
+                channel_id[0], url, result.title)
+            exist = upsert_res[5] is not None
+            if exist:
+                logging.info(
+                    'History has already been loaded for channel %s', result.title)
+                return
+
         if chat is None:
-            logging.info('Cannot find right channel for %s', invite_code)
-            return None
-
-        upsert_res = db_stats.upsert_channel(chat.id, url, chat.title)
-        exist = upsert_res[4] is not None
-        if exist:
-            logging.info('Known channel %s', chat.title)
-            return
-
-        logging.info('Checking channel %s', chat.title)
-        async for dialog in client.iter_dialogs():
-            if dialog.entity.id == chat.id:
-                need_to_add = False
-                break
-
-        if not need_to_add:
-            logging.info('Already in channel %s', chat.title)
+            try:
+                chat = await client(ImportChatInviteRequest(invite_code))
+            except errors.FloodWaitError as ex_flood_wait:
+                await asyncio.sleep(ex_flood_wait.seconds + 10)
+                chat = await client(ImportChatInviteRequest(invite_code))
+            chat = chat.chats[0]
+            logging.info('Just added to channel %s', chat.title)
             return chat
 
-        chat = await client(ImportChatInviteRequest(invite_code))
-        chat = chat.chats[0]
-        logging.info('Just added to channel %s', chat.title)
         return chat
 
     except Exception as err_chat:
@@ -260,19 +272,21 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
         if is_primary:
             await forward_primary(to_primary_id, message, reply, client)
         elif to_secondary_id != 0:
+            joined = False
             if join_channels:
                 for url in set(join_urls):
-                    url_exists = db_stats.has_channel(url, None) is not None
+                    url_exists = db_stats.get_channel(url, None) is not None
                     if url_exists:
                         logging.info('Already exists url %s', url)
                         continue
                     await join_link(url, client)
+                    joined = True
 
-            if len(join_urls) > 0:
+            if len(join_urls) > 0 and joined:
                 await client.forward_messages(to_secondary_id, message)
                 logging.info('Forwarding to secondary (id = %s)', message.id)
             else:
-                logging.info('No link, no signal (id = %s, text = %s)',
+                logging.info('No link, no signal (id = %s, text = %s) or already exists url',
                              message.id, orig_message_text)
         else:
             logging.info(

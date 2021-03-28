@@ -5,10 +5,11 @@ import threading
 import logging
 import os
 import classes
-from telethon import TelegramClient, errors
+from telethon import TelegramClient, errors, functions
 import config
 
 import helper
+import forwarder
 
 DB_STATS_PATH = os.getenv("db_stats_path")
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
@@ -23,9 +24,12 @@ async def process_history(wait_event: threading.Event):
     while not wait_event.is_set():
         try:
             await download_history(wait_event)
+        except Exception as ex:
+            logging.info('download_history: %s', ex)
+        try:
             await analyze_history(wait_event)
         except Exception as ex:
-            logging.info('process_history: %s', ex)
+            logging.info('analyze_history: %s', ex)
         wait_event.clear()
         wait_event.wait(STATS_COLLECT_SEC)
 
@@ -35,7 +39,7 @@ async def analyze_history(wait_event: threading.Event):
 
 
 async def download_history(wait_event: threading.Event):
-    exec_string = "SELECT Id FROM Channel WHERE HistoryLoaded IS NULL OR HistoryLoaded <> 1"
+    exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded IS NULL OR HistoryLoaded <> 1"
     channels = None
 
     with classes.SQLite(DB_STATS_PATH, 'download_history, db:', None) as cur:
@@ -44,15 +48,12 @@ async def download_history(wait_event: threading.Event):
     async with TelegramClient(config.SESSION_FILE, api_id, api_hash) as client:
         for channel_item in channels:
             channel_id = channel_item[0]
-            channel = None
-            async for dialog in client.iter_dialogs():
-                if dialog.entity.id == channel_id:
-                    channel = dialog
-                    break
+            channel = await forwarder.get_in_channel(channel_id, client)
             if channel is None:
-                logging.info(
-                    'Channel id: %s, join requred', channel_id)
-                # TODO add join here if needed
+                channel_link = channel_item[1]
+                channel = await forwarder.join_link(channel_link, client)
+            if channel is None:
+                logging.info('Channel id: %s, cannot join', channel_id)
                 continue
 
             messages_list = list()
@@ -138,7 +139,7 @@ def get_db_safe_title(title):
     return str(title).replace("'", "''")
 
 
-def has_channel(access_url, title):
+def get_channel(access_url, title):
     if access_url is None and title is None:
         return None
 
@@ -160,7 +161,7 @@ def has_channel(access_url, title):
 
         return result.fetchone()
     except Exception as ex:
-        logging.info('has_channel: %s', ex)
+        logging.info('get_channel: %s', ex)
         return None
     finally:
         sql_connection.close()
@@ -171,7 +172,7 @@ def upsert_channel(id_, access_url, title):
         lock.acquire()
         sql_connection = sqlite3.connect(DB_STATS_PATH)
         cur = sql_connection.cursor()
-        exec_string = f"SELECT Name, AccessLink, CreateDate, UpdateDate From Channel WHERE Id = {id_}"
+        exec_string = f"SELECT Name, AccessLink, CreateDate, UpdateDate, HistoryLoaded, HistoryUpdateDate, HistoryAnalyzed, HistoryAnalysisUpdateDate FROM Channel WHERE Id = {id_}"
 
         result = cur.execute(exec_string)
         title_safe = get_db_safe_title(title)
@@ -179,19 +180,22 @@ def upsert_channel(id_, access_url, title):
         select_channel = result.fetchone()
 
         if select_channel is None:
-            insert_string = f"INSERT INTO Channel VALUES ({id_},'{title_safe}','{access_url}','{now_str}',NULL) ON CONFLICT(Id) DO UPDATE SET UpdateDate=excluded.UpdateDate"
+            insert_string = f"INSERT INTO Channel VALUES ({id_},'{title_safe}','{access_url}','{now_str}') ON CONFLICT(Id) DO UPDATE SET UpdateDate=excluded.UpdateDate"
             cur.execute(insert_string)
             sql_connection.commit()
             return (id_, title_safe, access_url, now_str, None)
 
-        (name, link, create_date, update_date) = select_channel
+        (name, link, create_date, update_date,
+            history_loaded, history_update_date,
+         history_analyzed, history_analysis_update_date) = select_channel
 
         if title_safe != name or access_url != link:
             update_string = f"UPDATE Channel SET Name='{title_safe}', AccessLink='{access_url}', UpdateDate='{now_str}' WHERE Id = {id_}"
             cur.execute(update_string)
             sql_connection.commit()
 
-        return (id_, title_safe, access_url, create_date, update_date)
+        return (id_, title_safe, access_url, create_date, update_date, history_loaded, history_update_date,
+                history_analyzed, history_analysis_update_date)
 
     except Exception as ex:
         logging.info('upsert_channel: %s', ex)
