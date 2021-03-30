@@ -19,7 +19,7 @@ DB_SYMBOLS_PATH = os.getenv("db_symbols_path")
 DB_STATS_PATH = os.getenv("db_stats_path")
 
 poll_event = threading.Event()
-POLL_INTERVAL_SEC = 60 * 60
+POLL_INTERVAL_SEC = 4 * 60 * 60
 POLL_THROTTLE_SEC = 2 * 60
 lock = threading.Lock()
 

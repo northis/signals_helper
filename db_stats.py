@@ -67,7 +67,8 @@ async def download_history(wait_event: threading.Event):
                 channel_link = channel_item[1]
                 channel = await forwarder.join_link(channel_link, client)
             if channel is None:
-                logging.info('Channel id: %s, cannot join', channel_id)
+                logging.info(
+                    'Channel id: %s, cannot join or already in', channel_id)
                 continue
 
             messages_list = list()
@@ -153,6 +154,15 @@ def get_db_safe_title(title):
     return str(title).replace("'", "''")
 
 
+def is_history_loaded(channel_id, url, title):
+    upsert_res = upsert_channel(channel_id, url, title)
+    if upsert_channel is None:
+        return False
+
+    got_history = upsert_res[5] is not None
+    return got_history
+
+
 def get_channel(access_url, title):
     if access_url is None and title is None:
         return None
@@ -182,10 +192,7 @@ def get_channel(access_url, title):
 
 
 def upsert_channel(id_, access_url, title):
-    try:
-        lock.acquire()
-        sql_connection = sqlite3.connect(DB_STATS_PATH)
-        cur = sql_connection.cursor()
+    with classes.SQLite(DB_STATS_PATH, 'upsert_channel, db:', lock) as cur:
         exec_string = f"SELECT Name, AccessLink, CreateDate, UpdateDate, HistoryLoaded, HistoryUpdateDate, HistoryAnalyzed, HistoryAnalysisUpdateDate FROM Channel WHERE Id = {id_}"
 
         result = cur.execute(exec_string)
@@ -193,27 +200,21 @@ def upsert_channel(id_, access_url, title):
         now_str = helper.get_now_utc_iso()
         select_channel = result.fetchone()
 
+        if access_url is None and title is None:
+            return select_channel
+
         if select_channel is None:
-            insert_string = f"INSERT INTO Channel VALUES ({id_},'{title_safe}','{access_url}','{now_str}') ON CONFLICT(Id) DO UPDATE SET UpdateDate=excluded.UpdateDate"
+            insert_string = f"INSERT INTO Channel VALUES ({id_},'{title_safe}','{access_url}','{now_str}', NULL, NULL, NULL, NULL, NULL) ON CONFLICT(Id) DO UPDATE SET UpdateDate=excluded.UpdateDate"
             cur.execute(insert_string)
-            sql_connection.commit()
-            return (id_, title_safe, access_url, now_str, None)
+            return (id_, title_safe, access_url, now_str, None, None, None, None, None)
 
         (name, link, create_date, update_date,
             history_loaded, history_update_date,
-         history_analyzed, history_analysis_update_date) = select_channel
+            history_analyzed, history_analysis_update_date) = select_channel
 
         if title_safe != name or access_url != link:
             update_string = f"UPDATE Channel SET Name='{title_safe}', AccessLink='{access_url}', UpdateDate='{now_str}' WHERE Id = {id_}"
             cur.execute(update_string)
-            sql_connection.commit()
 
         return (id_, title_safe, access_url, create_date, update_date, history_loaded, history_update_date,
                 history_analyzed, history_analysis_update_date)
-
-    except Exception as ex:
-        logging.info('upsert_channel: %s', ex)
-        return (None, None, None, None, None)
-    finally:
-        sql_connection.close()
-        lock.release()
