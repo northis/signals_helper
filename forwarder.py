@@ -9,12 +9,14 @@ from telethon.tl.functions.channels import GetMessagesRequest, JoinChannelReques
 import config
 import classes
 import db_stats
+import traceback
 
 SIGNAL_REGEX = r"(buy)|(sell)"
 LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
 
-INVITE_REGEX = r"joinchat/(.+)"
-URL_REGEX = r"t.me/(.+)"
+INVITE_REGEX = r"joinchat\/(.+)"
+URL_REGEX = r"t.me\/(.+)"
+TRADINGVIEW_REGEX = r"tradingview.com\/(.+)"
 
 load_dotenv()
 main_config = config.get_config()
@@ -224,9 +226,9 @@ async def join_link(url, client):
         db_stats.upsert_channel(chat.id, url, chat.title)
         return chat
 
-    except Exception as err_chat:
+    except Exception:
         logging.info(
-            'Cannot add by code %s: error:%s', invite_code, str(err_chat))
+            'Cannot add via %s: error:%s', url, traceback.format_exc())
         return None
 
 
@@ -285,22 +287,27 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
     message_link = re.finditer(LINKS_REGEX, orig_message_text, re.IGNORECASE)
     contains_no_links = True
     for message_link_match in message_link:
-        join_urls.append(message_link_match.group(0))
+        res_group = message_link_match.group(0)
+        if re.search(TRADINGVIEW_REGEX, res_group) is not None:
+            continue
+        join_urls.append(res_group)
         contains_no_links = False
 
     if reply is not None:
         reply_text = str(reply.to_dict()['message'])
         message_link = re.finditer(LINKS_REGEX, reply_text, re.IGNORECASE)
         for message_link_match in message_link:
-            join_urls.append(message_link_match.group(0))
             contains_no_links = False
+            break
 
     is_signal = re.search(SIGNAL_REGEX, message_text) is not None
-    is_primary = is_primary and contains_no_links and (
-        message.is_reply or is_signal)
+    has_photo = message.photo is not None
+    is_primary = (is_primary or has_photo) and contains_no_links and (
+        message.is_reply or is_signal or has_photo)
 
     logging.info(
-        'Message %s (contains_no_links=%s, is_signal=%s)', message.id, contains_no_links, is_signal)
+        'Message %s (contains_no_links=%s, is_signal=%s, has_photo=%s)',
+        message.id, contains_no_links, is_signal, has_photo)
 
     try:
         if is_primary:
@@ -315,10 +322,10 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
                         channel_id = channel_ids[0]
                         await exit_if_needed(url, channel_id, client)
                         continue
-                    await join_link(url, client)
-                    joined = True
+                    joined_res = await join_link(url, client)
+                    joined = joined_res is not None
 
-            if len(join_urls) > 0 and joined:
+            if joined:
                 await client.forward_messages(to_secondary_id, message)
                 logging.info('Forwarding to secondary (id = %s)', message.id)
             else:

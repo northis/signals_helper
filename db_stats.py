@@ -52,6 +52,16 @@ async def analyze_history(wait_event: threading.Event):
         await analyze_channel(wait_event, channel_id)
 
 
+async def bulk_exit(client):
+    exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded = 1 ORDER BY HistoryUpdateDate DESC"
+    with classes.SQLite(DB_STATS_PATH, 'bulk_exit, db:', None) as cur:
+        channels = cur.execute(exec_string).fetchall()
+        for channel in channels:
+            channel_id = channel[0]
+            channel_link = channel[1]
+            await forwarder.exit_if_needed(channel_link, channel_id, client)
+
+
 async def download_history(wait_event: threading.Event):
     exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded IS NULL OR HistoryLoaded <> 1"
     channels = None
@@ -63,6 +73,7 @@ async def download_history(wait_event: threading.Event):
         for channel_item in channels:
             channel_id = channel_item[0]
             channel = await forwarder.get_in_channel(channel_id, client)
+            channel_link = None
             if channel is None:
                 channel_link = channel_item[1]
                 channel = await forwarder.join_link(channel_link, client)
@@ -100,6 +111,9 @@ async def download_history(wait_event: threading.Event):
 
             with classes.SQLite(DB_STATS_PATH, 'download_history, db update:', lock) as cur:
                 channels = cur.execute(update_string)
+
+            if channel_link is not None:
+                await forwarder.exit_if_needed(channel_link, channel_id, client)
 
         if wait_event.is_set():
             return
