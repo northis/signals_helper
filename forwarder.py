@@ -283,12 +283,14 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
     reply_text = None
     contains_no_links = None
     is_signal = None
+    is_tradingview = False
 
     message_link = re.finditer(LINKS_REGEX, orig_message_text, re.IGNORECASE)
     contains_no_links = True
     for message_link_match in message_link:
         res_group = message_link_match.group(0)
         if re.search(TRADINGVIEW_REGEX, res_group) is not None:
+            is_tradingview = True
             continue
         join_urls.append(res_group)
         contains_no_links = False
@@ -302,7 +304,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
 
     is_signal = re.search(SIGNAL_REGEX, message_text) is not None
     has_photo = message.photo is not None
-    is_primary = (is_primary or has_photo) and contains_no_links and (
+    is_primary = (is_primary or is_tradingview) and contains_no_links and (
         message.is_reply or is_signal or has_photo)
 
     logging.info(

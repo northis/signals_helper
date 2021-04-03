@@ -1,6 +1,5 @@
 import logging
 import os
-import sqlite3
 import threading
 from enum import Enum
 from threading import Thread

@@ -1,15 +1,19 @@
 import asyncio
-import datetime
 import sqlite3
 import threading
 import logging
 import os
 import classes
+import datetime
 from telethon import TelegramClient, errors, functions
 import config
+import re
+
 
 import helper
 import forwarder
+import db_poll
+import signal_parser
 
 DB_STATS_PATH = os.getenv("db_stats_path")
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
@@ -23,33 +27,109 @@ api_hash = os.getenv('api_hash')
 async def process_history(wait_event: threading.Event):
     while not wait_event.is_set():
         try:
+            await asyncio.sleep(15)  # wait for data
+            analyze_history(wait_event)
+        except Exception as ex:
+            logging.error('analyze_history: %s', ex)
+        try:
             await download_history(wait_event)
         except Exception as ex:
-            logging.info('download_history: %s', ex)
-        try:
-            await analyze_history(wait_event)
-        except Exception as ex:
-            logging.info('analyze_history: %s', ex)
+            logging.error('download_history: %s', ex)
         wait_event.clear()
         wait_event.wait(STATS_COLLECT_SEC)
 
 
-async def analyze_channel(wait_event: threading.Event, channel_id):
-
+def analyze_channel(wait_event: threading.Event, channel_id):
     out_path = os.path.join(CHANNELS_HISTORY_DIR, f"{channel_id}.json")
     messages = config.get_json(out_path)
-    for message in messages:
-        print(message)
+    if messages is None or messages.count() < 1:
+        logging.info('analyze_channel: no data from %s', out_path)
+
+    ordered_messges = sorted(messages, key=lambda x: x["id"], reverse=False)
+
+    min_channel_date = helper.str_to_utc_datetime(
+        ordered_messges[0]["date"])
+    max_channel_date = helper.str_to_utc_datetime(
+        ordered_messges[ordered_messges.count-1]["date"])
+
+    order_book = dict()
+
+    for symbol in signal_parser.symbols_regex_map:
+        min_date = db_poll.db_time_ranges[symbol][0]
+        max_date = db_poll.db_time_ranges[symbol][1]
+
+        if (min_channel_date > min_date):
+            min_date = min_channel_date
+
+        if (max_channel_date < max_date):
+            max_date = max_channel_date
+
+        min_date_rounded_minutes = min_date - datetime.timedelta(seconds=min_date.second,
+                                                                 microseconds=min_date.microsecond)
+
+        max_date_rounded_minutes = max_date - datetime.timedelta(seconds=max_date.second,
+                                                                 microseconds=max_date.microsecond)
+
+        min_date_str = helper.datetime_to_utc_datetime(
+            min_date_rounded_minutes)
+        max_date_str = helper.datetime_to_utc_datetime(
+            max_date_rounded_minutes)
+
+        logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
+                     channel_id, symbol, min_date_str, max_date_str)
+
+        res = analyze_channel_symbol(
+            ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
+
+        order_book[symbol] = res
+
+        if wait_event.is_set():
+            return order_book
+    return order_book
 
 
-async def analyze_history(wait_event: threading.Event):
-    exec_string = "SELECT Id FROM Channel WHERE HistoryAnalyzed = 1"
+def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
+    regex = signal_parser.symbols_regex_map[symbol]
+    order_book_symbol = dict()
+
+    current_date = min_date
+    while current_date <= max_date:
+        next_date = current_date + datetime.timedelta(minutes=1)
+
+        found = list(filter(lambda x:
+                            helper.str_to_utc_datetime(x["date"]) >= current_date and
+                            helper.str_to_utc_datetime(x["date"]) < next_date, ordered_messges))
+        if (found.count() == 0):
+            current_date = next_date
+            continue
+
+        symbol_found = list(
+            filter(lambda x: re.findall(regex, x["text"]), found))
+
+        if (symbol_found.count() == 0):
+            current_date = next_date
+            continue
+
+        current_date = next_date
+
+    return order_book_symbol
+
+
+def analyze_history(wait_event: threading.Event):
+    # gold like one of
+    min_date = db_poll.db_time_ranges[classes.Symbol.XAUUSD][0]
+
+    if min_date is None:
+        logging.info('analyze_channel: symbol data is not loaded yet')
+        return
+
+    exec_string = "SELECT Id FROM Channel WHERE HistoryLoaded = 1 AND (HistoryAnalyzed <> 1 OR HistoryAnalyzed IS NULL) "
     channels_ids = None
     with classes.SQLite(DB_STATS_PATH, 'download_history, db:', None) as cur:
         channels_ids = cur.execute(exec_string).fetchall()
 
     for channel_id in channels_ids:
-        await analyze_channel(wait_event, channel_id)
+        analyze_channel(wait_event, channel_id[0])
 
 
 async def bulk_exit(client):
