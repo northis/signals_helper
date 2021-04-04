@@ -17,7 +17,7 @@ def datetime_to_utc_datetime(dt_typed):
     return dt_typed
 
 
-def str_to_utc_datetime(dt, timezone="UTC", input_format=config.DB_DATE_FORMAT):
+def str_to_utc_datetime(dt, timezone="UTC", input_format=config.ISO_DATE_FORMAT):
     tz1 = pytz.timezone(timezone)
     tz2 = pytz.timezone("UTC")
 

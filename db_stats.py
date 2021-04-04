@@ -16,6 +16,7 @@ import db_poll
 import signal_parser
 
 DB_STATS_PATH = os.getenv("db_stats_path")
+DB_SYMBOLS_PATH = os.getenv("db_symbols_path")
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 lock = threading.Lock()
@@ -26,11 +27,11 @@ api_hash = os.getenv('api_hash')
 
 async def process_history(wait_event: threading.Event):
     while not wait_event.is_set():
-        try:
-            await asyncio.sleep(15)  # wait for data
-            analyze_history(wait_event)
-        except Exception as ex:
-            logging.error('analyze_history: %s', ex)
+        # try:
+        #     await asyncio.sleep(5)  # wait for data
+        #     analyze_history(wait_event)
+        # except Exception as ex:
+        #     logging.error('analyze_history: %s', ex)
         try:
             await download_history(wait_event)
         except Exception as ex:
@@ -42,7 +43,7 @@ async def process_history(wait_event: threading.Event):
 def analyze_channel(wait_event: threading.Event, channel_id):
     out_path = os.path.join(CHANNELS_HISTORY_DIR, f"{channel_id}.json")
     messages = config.get_json(out_path)
-    if messages is None or messages.count() < 1:
+    if messages is None or len(messages) < 1:
         logging.info('analyze_channel: no data from %s', out_path)
 
     ordered_messges = sorted(messages, key=lambda x: x["id"], reverse=False)
@@ -50,7 +51,7 @@ def analyze_channel(wait_event: threading.Event, channel_id):
     min_channel_date = helper.str_to_utc_datetime(
         ordered_messges[0]["date"])
     max_channel_date = helper.str_to_utc_datetime(
-        ordered_messges[ordered_messges.count-1]["date"])
+        ordered_messges[len(ordered_messges)-1]["date"])
 
     order_book = dict()
 
@@ -70,13 +71,8 @@ def analyze_channel(wait_event: threading.Event, channel_id):
         max_date_rounded_minutes = max_date - datetime.timedelta(seconds=max_date.second,
                                                                  microseconds=max_date.microsecond)
 
-        min_date_str = helper.datetime_to_utc_datetime(
-            min_date_rounded_minutes)
-        max_date_str = helper.datetime_to_utc_datetime(
-            max_date_rounded_minutes)
-
         logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
-                     channel_id, symbol, min_date_str, max_date_str)
+                     channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
 
         res = analyze_channel_symbol(
             ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
@@ -90,23 +86,67 @@ def analyze_channel(wait_event: threading.Event, channel_id):
 
 def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
     regex = signal_parser.symbols_regex_map[symbol]
-    order_book_symbol = dict()
+    order_book_symbol = list()
+
+    min_date_str = min_date.strftime(config.DB_DATE_FORMAT)
+    max_date_str = max_date.strftime(config.DB_DATE_FORMAT)
+
+    symbol_data = None
+    exec_string = f"SELECT [DateTime], High, Low, Close FROM {symbol} WHERE [DateTime] BETWEEN '{min_date_str}' AND '{max_date_str}' ORDER BY [DateTime]"
+    with classes.SQLite(DB_SYMBOLS_PATH, 'analyze_channel_symbol, db:', None) as cur:
+        symbol_data = cur.execute(exec_string).fetchall()
+
+    if symbol_data is None or len(symbol_data) == 0:
+        logging.info('analyze_channel_symbol: no data for symbol %s', symbol)
+
+    min_date_str_iso = min_date.strftime(config.ISO_DATE_FORMAT)
+    max_date_str_iso = max_date.strftime(config.ISO_DATE_FORMAT)
+
+    filtered_messages = list(filter(lambda x:
+                                    x["date"] >= min_date_str_iso and
+                                    x["date"] <= max_date_str_iso, ordered_messges))
 
     current_date = min_date
     while current_date <= max_date:
         next_date = current_date + datetime.timedelta(minutes=1)
+        current_date_str = current_date.strftime(config.ISO_DATE_FORMAT)
+        next_date_str = next_date.strftime(config.ISO_DATE_FORMAT)
 
-        found = list(filter(lambda x:
-                            helper.str_to_utc_datetime(x["date"]) >= current_date and
-                            helper.str_to_utc_datetime(x["date"]) < next_date, ordered_messges))
-        if (found.count() == 0):
+        orders_open = list(filter(lambda x:
+                                  x["is_open"] is True and
+                                  x["symbol"] == symbol, order_book_symbol))
+
+        found_messages = list(filter(lambda x:
+                                     x["date"] >= current_date_str and
+                                     x["date"] < next_date_str, filtered_messages))
+
+        has_messages_in_min = len(found_messages) > 0
+        has_orders_open = len(orders_open) > 0
+
+        if not has_messages_in_min and not has_orders_open:
             current_date = next_date
             continue
 
-        symbol_found = list(
-            filter(lambda x: re.findall(regex, x["text"]), found))
+        found_data = list(filter(lambda x:
+                                 x[0] >= current_date and
+                                 x[0] < next_date, symbol_data))
 
-        if (symbol_found.count() == 0):
+        has_data_for_minute = len(found_data) > 0
+        if not found_data:
+            logging.info('analyze_channel_symbol: no data for symbol %s and time %s',
+                         symbol, current_date.isoformat())
+            current_date = next_date
+            continue
+
+        if has_orders_open:
+            for order in orders_open:
+                if order["is_buy"] is True:
+                    print("buy")
+
+        symbol_found = list(
+            filter(lambda x: re.findall(regex, x["text"]), found_messages))
+
+        if (len(symbol_found) == 0):
             current_date = next_date
             continue
 
