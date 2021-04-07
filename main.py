@@ -1,11 +1,11 @@
 import threading
 import asyncio
 import logging
-
-import db_poll
-import db_stats
-import forwarder
 import classes
+import forwarder
+import db_stats
+import db_poll
+
 
 poll_event_sync = threading.Event()
 stop_flag = classes.StopFlag()

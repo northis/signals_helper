@@ -3,26 +3,19 @@ import sqlite3
 import threading
 import logging
 import os
-import classes
 import datetime
 from telethon import TelegramClient, errors, functions
+import classes
 import config
-import re
-
 
 import helper
 import forwarder
 import db_poll
 import signal_parser
 
-DB_STATS_PATH = os.getenv("db_stats_path")
-DB_SYMBOLS_PATH = os.getenv("db_symbols_path")
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 lock = threading.Lock()
-CHANNELS_HISTORY_DIR = os.getenv("channels_history_dir")
-api_id = os.getenv('api_id')
-api_hash = os.getenv('api_hash')
 
 
 async def process_history(wait_event: threading.Event):
@@ -41,7 +34,7 @@ async def process_history(wait_event: threading.Event):
 
 
 def analyze_channel(wait_event: threading.Event, channel_id):
-    out_path = os.path.join(CHANNELS_HISTORY_DIR, f"{channel_id}.json")
+    out_path = os.path.join(config.CHANNELS_HISTORY_DIR, f"{channel_id}.json")
     messages = config.get_json(out_path)
     if messages is None or len(messages) < 1:
         logging.info('analyze_channel: no data from %s', out_path)
@@ -74,7 +67,7 @@ def analyze_channel(wait_event: threading.Event, channel_id):
         logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
                      channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
 
-        res = analyze_channel_symbol(
+        res = signal_parser.analyze_channel_symbol(
             ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
 
         order_book[symbol] = res
@@ -82,77 +75,6 @@ def analyze_channel(wait_event: threading.Event, channel_id):
         if wait_event.is_set():
             return order_book
     return order_book
-
-
-def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
-    regex = signal_parser.symbols_regex_map[symbol]
-    order_book_symbol = list()
-
-    min_date_str = min_date.strftime(config.DB_DATE_FORMAT)
-    max_date_str = max_date.strftime(config.DB_DATE_FORMAT)
-
-    symbol_data = None
-    exec_string = f"SELECT [DateTime], High, Low, Close FROM {symbol} WHERE [DateTime] BETWEEN '{min_date_str}' AND '{max_date_str}' ORDER BY [DateTime]"
-    with classes.SQLite(DB_SYMBOLS_PATH, 'analyze_channel_symbol, db:', None) as cur:
-        symbol_data = cur.execute(exec_string).fetchall()
-
-    if symbol_data is None or len(symbol_data) == 0:
-        logging.info('analyze_channel_symbol: no data for symbol %s', symbol)
-
-    min_date_str_iso = min_date.strftime(config.ISO_DATE_FORMAT)
-    max_date_str_iso = max_date.strftime(config.ISO_DATE_FORMAT)
-
-    filtered_messages = list(filter(lambda x:
-                                    x["date"] >= min_date_str_iso and
-                                    x["date"] <= max_date_str_iso, ordered_messges))
-
-    current_date = min_date
-    while current_date <= max_date:
-        next_date = current_date + datetime.timedelta(minutes=1)
-        current_date_str = current_date.strftime(config.ISO_DATE_FORMAT)
-        next_date_str = next_date.strftime(config.ISO_DATE_FORMAT)
-
-        orders_open = list(filter(lambda x:
-                                  x["is_open"] is True and
-                                  x["symbol"] == symbol, order_book_symbol))
-
-        found_messages = list(filter(lambda x:
-                                     x["date"] >= current_date_str and
-                                     x["date"] < next_date_str, filtered_messages))
-
-        has_messages_in_min = len(found_messages) > 0
-        has_orders_open = len(orders_open) > 0
-
-        if not has_messages_in_min and not has_orders_open:
-            current_date = next_date
-            continue
-
-        found_data = list(filter(lambda x:
-                                 x[0] >= current_date and
-                                 x[0] < next_date, symbol_data))
-
-        has_data_for_minute = len(found_data) > 0
-        if not found_data:
-            logging.info('analyze_channel_symbol: no data for symbol %s and time %s',
-                         symbol, current_date.isoformat())
-            current_date = next_date
-            continue
-
-        if has_orders_open:
-            for order in orders_open:
-                if order["is_buy"] is True:
-                    print("buy")
-
-        symbol_found = list(
-            filter(lambda x: re.findall(regex, x["text"]), found_messages))
-
-        if (len(symbol_found) == 0):
-            current_date = next_date
-            continue
-
-        current_date = next_date
-
-    return order_book_symbol
 
 
 def analyze_history(wait_event: threading.Event):
@@ -165,7 +87,7 @@ def analyze_history(wait_event: threading.Event):
 
     exec_string = "SELECT Id FROM Channel WHERE HistoryLoaded = 1 AND (HistoryAnalyzed <> 1 OR HistoryAnalyzed IS NULL) "
     channels_ids = None
-    with classes.SQLite(DB_STATS_PATH, 'download_history, db:', None) as cur:
+    with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
         channels_ids = cur.execute(exec_string).fetchall()
 
     for channel_id in channels_ids:
@@ -174,7 +96,7 @@ def analyze_history(wait_event: threading.Event):
 
 async def bulk_exit(client):
     exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded = 1 ORDER BY HistoryUpdateDate DESC"
-    with classes.SQLite(DB_STATS_PATH, 'bulk_exit, db:', None) as cur:
+    with classes.SQLite(config.DB_STATS_PATH, 'bulk_exit, db:', None) as cur:
         channels = cur.execute(exec_string).fetchall()
         for channel in channels:
             channel_id = channel[0]
@@ -186,10 +108,10 @@ async def download_history(wait_event: threading.Event):
     exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded IS NULL OR HistoryLoaded <> 1"
     channels = None
 
-    with classes.SQLite(DB_STATS_PATH, 'download_history, db:', None) as cur:
+    with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
         channels = cur.execute(exec_string).fetchall()
 
-    async with TelegramClient(config.SESSION_FILE, api_id, api_hash) as client:
+    async with TelegramClient(config.SESSION_FILE, config.api_id, config.api_hash) as client:
         for channel_item in channels:
             channel_id = channel_item[0]
             channel = await forwarder.get_in_channel(channel_id, client)
@@ -223,13 +145,13 @@ async def download_history(wait_event: threading.Event):
                 messages_list.append(msg_props)
 
             out_path = os.path.join(
-                CHANNELS_HISTORY_DIR, f"{channel_id}.json")
+                config.CHANNELS_HISTORY_DIR, f"{channel_id}.json")
             config.set_json(out_path, messages_list)
             now_str = helper.get_now_utc_iso()
 
             update_string = f"UPDATE Channel SET HistoryLoaded = 1, HistoryUpdateDate = '{now_str}' WHERE Id={channel_id}"
 
-            with classes.SQLite(DB_STATS_PATH, 'download_history, db update:', lock) as cur:
+            with classes.SQLite(config.DB_STATS_PATH, 'download_history, db update:', lock) as cur:
                 channels = cur.execute(update_string)
 
             if channel_link is not None:
@@ -247,7 +169,7 @@ def main_exec(wait_event: threading.Event):
 
 
 def get_primary_message_id(id_message, id_channel):
-    sql_connection = sqlite3.connect(DB_STATS_PATH)
+    sql_connection = sqlite3.connect(config.DB_STATS_PATH)
     cur = sql_connection.cursor()
     try:
         exec_string = f"SELECT IdPrimary From ChannelMessageLink WHERE IdMessage = {id_message} AND IdChannel={id_channel}"
@@ -266,7 +188,7 @@ def get_primary_message_id(id_message, id_channel):
 
 
 def set_primary_message_id(id_primary, id_message, id_channel):
-    sql_connection = sqlite3.connect(DB_STATS_PATH)
+    sql_connection = sqlite3.connect(config.DB_STATS_PATH)
     cur = sql_connection.cursor()
     try:
 
@@ -302,7 +224,7 @@ def get_channel(access_url, title):
         return None
 
     try:
-        sql_connection = sqlite3.connect(DB_STATS_PATH)
+        sql_connection = sqlite3.connect(config.DB_STATS_PATH)
         cur = sql_connection.cursor()
         select_str = "SELECT Id From Channel WHERE"
         if title is None:
@@ -326,7 +248,7 @@ def get_channel(access_url, title):
 
 
 def upsert_channel(id_, access_url, title):
-    with classes.SQLite(DB_STATS_PATH, 'upsert_channel, db:', lock) as cur:
+    with classes.SQLite(config.DB_STATS_PATH, 'upsert_channel, db:', lock) as cur:
         exec_string = f"SELECT Name, AccessLink, CreateDate, UpdateDate, HistoryLoaded, HistoryUpdateDate, HistoryAnalyzed, HistoryAnalysisUpdateDate FROM Channel WHERE Id = {id_}"
 
         result = cur.execute(exec_string)

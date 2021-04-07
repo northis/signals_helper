@@ -40,15 +40,6 @@ class Symbol(str):
     XAUUSD = "XAUUSD"
 
 
-class RobotCommand(str):
-    BUY = "buy"
-    SELL = "sell"
-    BREAKEVEN = "breakeven"
-    EXIT = "exit"
-    SET_SL = "set_sl"
-    SET_TP = "set_tp"
-
-
 class StopFlag:
     Value = False
     Sleep = 10

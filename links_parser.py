@@ -1,23 +1,16 @@
+import asyncio
+import re
+import datetime
+import json
 from telethon import TelegramClient, sync, events, tl, errors
 from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest
 from telethon.tl.functions.channels import GetMessagesRequest, JoinChannelRequest
 from telethon.errors import FloodWaitError
 import config
-import asyncio
-import re
-import datetime
-import os
-from datetime import timezone
-from dotenv import load_dotenv
-import json
+
 LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
 INVITE_REGEX = r"joinchat/(.+)"
 URL_REGEX = r"t.me/(.+)"
-
-
-load_dotenv()
-api_id = os.getenv('api_id')
-api_hash = os.getenv('api_hash')
 
 
 def get_links_source():
@@ -42,7 +35,7 @@ links_source = get_links_source()['messages']
 
 
 async def main_exec():
-    async with TelegramClient('secure_session.session', api_id, api_hash) as client:
+    async with TelegramClient('secure_session.session', config.api_id, config.api_hash) as client:
         links_target = get_links()
 
         unique_urls = {}

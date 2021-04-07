@@ -20,8 +20,6 @@ TRADINGVIEW_REGEX = r"tradingview.com\/(.+)"
 
 load_dotenv()
 main_config = config.get_config()
-api_id = os.getenv('api_id')
-api_hash = os.getenv('api_hash')
 forwards = main_config['forwards']
 join_channels = main_config['join_channels']
 main_channels = list()
@@ -34,7 +32,7 @@ def message_to_str(message):
 async def main_exec(stop_flag: classes.StopFlag):
     while True:
         try:
-            async with TelegramClient(config.SESSION_HISTORY_FILE, api_id, api_hash) as client:
+            async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:
                 for forward in forwards:
                     await init_forward(forward, client)
 

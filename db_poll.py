@@ -1,21 +1,15 @@
 import logging
-import os
 import threading
 from enum import Enum
 from threading import Thread
-
-from dotenv import load_dotenv
 
 import classes
 import config
 import helper
 import parsers
 
-load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
-DB_SYMBOLS_PATH = os.getenv("db_symbols_path")
-DB_STATS_PATH = os.getenv("db_stats_path")
 
 poll_event = threading.Event()
 POLL_INTERVAL_SEC = 4 * 60 * 60
@@ -63,7 +57,7 @@ def process_price_data(symbol, access_type):
     else:
         return
 
-    with classes.SQLite(DB_SYMBOLS_PATH, 'process_price_data:', lock) as cur:
+    with classes.SQLite(config.DB_SYMBOLS_PATH, 'process_price_data:', lock) as cur:
         for price_item in sorted_items:
             utc_date = price_item[0]
             if symbol_last_datetime.replace(tzinfo=None) > utc_date.replace(tzinfo=None):
@@ -81,7 +75,7 @@ def update_db_time_ranges():
 
 
 def update_db_time_range(symbol):
-    with classes.SQLite(DB_SYMBOLS_PATH, 'update_db_time_range:', None) as cur:
+    with classes.SQLite(config.DB_SYMBOLS_PATH, 'update_db_time_range:', None) as cur:
         # Fill the DB first, this code thinks it will return something anyway
         exec_string = f"SELECT [DateTime] From {symbol} ORDER BY [DateTime]"
 

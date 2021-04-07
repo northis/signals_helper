@@ -12,14 +12,12 @@ import helper
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
-DB_SYMBOLS_PATH = os.getenv("db_symbols_path")
-DB_STATS_PATH = os.getenv("db_stats_path")
 COMMIT_BATCH_ROW_COUNT = 1000000
 
 
 def import_csv(symbol, input_file, symbol_last_datetime):
     # symbol_last_datetime = db_time_ranges[symbol][1] for ex.
-    sql_connection = sqlite3.connect(DB_SYMBOLS_PATH)
+    sql_connection = sqlite3.connect(config.DB_SYMBOLS_PATH)
     cur = sql_connection.cursor()
 
     count = 0
@@ -89,7 +87,7 @@ def import_csv(symbol, input_file, symbol_last_datetime):
 
 
 def import_json(input_file):
-    sql_connection = sqlite3.connect(DB_STATS_PATH)
+    sql_connection = sqlite3.connect(config.DB_STATS_PATH)
     cur = sql_connection.cursor()
 
     json_array = config.get_json(input_file)
