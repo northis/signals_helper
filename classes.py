@@ -69,6 +69,8 @@ class SignalProps(object):
     take_profits = typing.List[Decimal]
     stop_loss = Decimal
     date = str
+    has_reaction = bool
+    update_date = str
     move_sl_to_entry = MessageProps
     tp_hit = typing.List[MessageProps]
     move_sl_to_profit = typing.List[MessageProps]

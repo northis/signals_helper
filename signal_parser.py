@@ -110,6 +110,10 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
     text: str = message_to_text(msg)
     date: str = msg["date"]
 
+    if reply_to is None and text is None:
+        print("Cannot get price from signal, ignore it. Message text ia null and we don't have a reply")
+        return None
+
     signal = classes.SignalProps()
     signal.is_buy = re.match(BUY_REGEX, text) != None
     signal.date = str_to_utc_iso_datetime(date)
