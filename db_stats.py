@@ -2,6 +2,7 @@ import asyncio
 import sqlite3
 import threading
 import logging
+import traceback
 import os
 import datetime
 from telethon import TelegramClient, errors, functions
@@ -24,11 +25,13 @@ async def process_history(wait_event: threading.Event):
         #     await asyncio.sleep(5)  # wait for data
         #     analyze_history(wait_event)
         # except Exception as ex:
-        #     logging.error('analyze_history: %s', ex)
+        #     logging.error('analyze_history: %s, error: %s',
+        #                   ex, traceback.format_exc())
         try:
             await download_history(wait_event)
         except Exception as ex:
-            logging.error('download_history: %s', ex)
+            logging.error('download_history: %s, error: %s',
+                          ex, traceback.format_exc())
         wait_event.clear()
         wait_event.wait(STATS_COLLECT_SEC)
 
@@ -85,13 +88,16 @@ def analyze_history(wait_event: threading.Event):
         logging.info('analyze_channel: symbol data is not loaded yet')
         return
 
-    exec_string = "SELECT Id FROM Channel WHERE HistoryLoaded = 1 AND (HistoryAnalyzed <> 1 OR HistoryAnalyzed IS NULL) "
-    channels_ids = None
-    with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
-        channels_ids = cur.execute(exec_string).fetchall()
+    # exec_string = "SELECT Id FROM Channel WHERE HistoryLoaded = 1 AND (HistoryAnalyzed <> 1 OR HistoryAnalyzed IS NULL) "
+    # channels_ids = None
+    # with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
+    #     channels_ids = cur.execute(exec_string).fetchall()
 
-    for channel_id in channels_ids:
-        analyze_channel(wait_event, channel_id[0])
+    # 1295992076
+    # 1428566201
+    analyze_channel(wait_event, 1289623401)
+    # for channel_id in channels_ids:
+    #     analyze_channel(wait_event, channel_id[0])
 
 
 async def bulk_exit(client):

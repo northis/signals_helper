@@ -106,17 +106,25 @@ def str_to_utc_iso_datetime(dt):
 
 
 def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps):
-    id: int = msg["id"]
+    id_: int = msg["id"]
     text: str = message_to_text(msg)
     date: str = msg["date"]
 
     if reply_to is None and text is None:
-        print("Cannot get price from signal, ignore it. Message text ia null and we don't have a reply")
+        logging.debug(
+            "Cannot get price from signal, ignore it. Message text is null and we don't have a reply")
         return None
+
+    if reply_to is not None:
+        reply_to.update_date = date
+
+    if text is None:
+        text = ""
 
     signal = classes.SignalProps()
     signal.is_buy = re.match(BUY_REGEX, text) != None
-    signal.date = str_to_utc_iso_datetime(date)
+    signal.date = date
+    signal.id_ = id_
 
     symbol_search = re.search(symbol_regex, text)
     signal_search = re.search(SIGNAL_REGEX, text)
@@ -135,11 +143,17 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
     is_breakeven = breakeven_search is not None
     is_symbol = symbol_search is not None or (is_reply and is_signal)
 
+    if not is_signal and not is_reply:
+        logging.debug(
+            "Cannot get price from signal, ignore it. Message text isn't a signal and we don't have a reply")
+        return None
+
     if is_signal and is_symbol:
         # We want to parse signals with price only.
         price_dec = helper.str_to_decimal(signal_search.group(4))
         if price_dec is None:
-            print("Cannot get price from signal, ignore it. Message text: %s" % text)
+            logging.debug(
+                "Cannot get price from signal, ignore it. Message text: %s", text)
             return None
         signal.price = price_dec
 
@@ -147,7 +161,8 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
     if is_sl:
         sl_dec = helper.str_to_decimal(sl_search.group(1))
         if sl_dec is None:
-            print("Cannot get stoploss from signal, ignore it. Message text: %s" % text)
+            logging.debug(
+                "Cannot get stoploss from signal, ignore it. Message text: %s", text)
             return None
         signal.stop_loss = sl_dec
     elif not is_reply:
@@ -165,8 +180,8 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
 
     if is_reply:
         reply_message = classes.MessageProps()
-        reply_message.id = id
-        reply_message.reply_to_message_id = reply_to.id
+        reply_message.id_ = id_
+        reply_message.reply_to_message_id = reply_to.id_
         reply_message.text = text
         reply_message.date = signal.date
 
@@ -174,7 +189,7 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
             reply_to.move_sl_to_entry = reply_message
 
         if is_close:
-            reply_to.exit = reply_message
+            reply_to.exit_ = reply_message
 
         if is_tp_hit:
             if reply_to.tp_hit is None:

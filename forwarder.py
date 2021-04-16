@@ -216,17 +216,18 @@ async def join_link(url, client):
                 await asyncio.sleep(ex_flood_wait.seconds + 10)
                 chat = await client(ImportChatInviteRequest(invite_code))
             chat = chat.chats[0]
-
-            db_stats.upsert_channel(chat.id, url, chat.title)
             logging.info('Just added to channel %s', chat.title)
+
+        upsert_res = db_stats.upsert_channel(chat.id, url, chat.title)
+        is_new = upsert_res[4] is None
+        if is_new:
             return chat
 
-        db_stats.upsert_channel(chat.id, url, chat.title)
-        return chat
+        return None
 
     except Exception:
         logging.info(
-            'Cannot add via %s: error:%s', url, traceback.format_exc())
+            'Cannot add via %s: error: %s', url, traceback.format_exc())
         return None
 
 

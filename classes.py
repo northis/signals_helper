@@ -53,7 +53,7 @@ class StopFlag:
 
 @auto_attr_check
 class MessageProps(object):
-    id = int
+    id_ = int
     reply_to_message_id = int
     date = str
     text = str
@@ -62,20 +62,33 @@ class MessageProps(object):
 
 @auto_attr_check
 class SignalProps(object):
-    id = int
+    def __init__(self):
+        self.id_ = None
+        self.is_buy = None
+        self.is_sl_tp_delayed = None
+        self.price = None
+        self.take_profits = None
+        self.stop_loss = None
+        self.date = None
+        self.update_date = None
+        self.move_sl_to_entry = None
+        self.tp_hit = None
+        self.move_sl_to_profit = None
+        self.sl_hit = None
+        self.exit_ = None
+    id_ = int
     is_buy = bool
     is_sl_tp_delayed = bool
     price = Decimal
     take_profits = typing.List[Decimal]
     stop_loss = Decimal
     date = str
-    has_reaction = bool
     update_date = str
     move_sl_to_entry = MessageProps
     tp_hit = typing.List[MessageProps]
     move_sl_to_profit = typing.List[MessageProps]
     sl_hit = MessageProps
-    exit = MessageProps
+    exit_ = MessageProps
 
 
 class SQLite():
