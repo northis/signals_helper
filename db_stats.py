@@ -21,12 +21,12 @@ lock = threading.Lock()
 
 async def process_history(wait_event: threading.Event):
     while not wait_event.is_set():
-        # try:
-        #     await asyncio.sleep(5)  # wait for data
-        #     analyze_history(wait_event)
-        # except Exception as ex:
-        #     logging.error('analyze_history: %s, error: %s',
-        #                   ex, traceback.format_exc())
+        try:
+            await asyncio.sleep(5)  # wait for data
+            analyze_history(wait_event)
+        except Exception as ex:
+            logging.error('analyze_history: %s, error: %s',
+                          ex, traceback.format_exc())
         try:
             await download_history(wait_event)
         except Exception as ex:

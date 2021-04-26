@@ -3,6 +3,7 @@ import typing
 import asyncio
 import sqlite3
 import logging
+import json
 
 
 def getter_setter_gen(name, type_):
@@ -53,6 +54,12 @@ class StopFlag:
 
 @auto_attr_check
 class MessageProps(object):
+    def __init__(self):
+        self.id_ = 0
+        self.reply_to_message_id = 0
+        self.date = ""
+        self.text = ""
+        self.price = Decimal(0)
     id_ = int
     reply_to_message_id = int
     date = str
@@ -63,19 +70,19 @@ class MessageProps(object):
 @auto_attr_check
 class SignalProps(object):
     def __init__(self):
-        self.id_ = None
-        self.is_buy = None
-        self.is_sl_tp_delayed = None
-        self.price = None
-        self.take_profits = None
-        self.stop_loss = None
-        self.date = None
-        self.update_date = None
-        self.move_sl_to_entry = None
-        self.tp_hit = None
-        self.move_sl_to_profit = None
-        self.sl_hit = None
-        self.exit_ = None
+        self.id_ = 0
+        self.is_buy = False
+        self.is_sl_tp_delayed = False
+        self.price = Decimal(0)
+        self.take_profits = list()
+        self.stop_loss = Decimal(0)
+        self.date = ""
+        self.update_date = ""
+        self.move_sl_to_entry = MessageProps()
+        self.tp_hit = list()
+        self.move_sl_to_profit = list()
+        self.sl_hit = MessageProps()
+        self.exit_ = MessageProps()
     id_ = int
     is_buy = bool
     is_sl_tp_delayed = bool
@@ -89,6 +96,76 @@ class SignalProps(object):
     move_sl_to_profit = typing.List[MessageProps]
     sl_hit = MessageProps
     exit_ = MessageProps
+
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return str(obj)
+        return json.JSONEncoder.default(self, obj)
+
+class MessagePropsEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, MessageProps):
+            mp: MessageProps() = obj
+
+            return {"id" : mp.id_,
+                    "date": mp.date,
+                    "price": json.dumps(mp.price, cls=DecimalEncoder),
+                    "reply_to_message_id": mp.reply_to_message_id,
+                    "text": mp.text}
+        return json.JSONEncoder.default(self, obj)
+
+
+class SignalPropsEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, SignalProps):
+            sp: SignalProps = obj
+
+            exit_ = ""
+            move_sl_to_entry = ""
+            sl_hit = ""
+            if sp.exit_ is not None:
+                exit_ = json.dumps(sp.exit_, cls=MessagePropsEncoder)
+
+            if sp.move_sl_to_entry is not None:
+                move_sl_to_entry = json.dumps(sp.move_sl_to_entry, cls=MessagePropsEncoder)
+            
+            move_sl_to_profit = list()
+
+            if sp.move_sl_to_profit is not None:
+                for move_sl in sp.move_sl_to_profit:
+                    move_sl_to_profit.append(json.dumps(move_sl, cls=MessagePropsEncoder))
+
+            
+            if sp.sl_hit is not None:
+                sl_hit = json.dumps(sp.sl_hit, cls=MessagePropsEncoder)
+
+            take_profits = list()
+            if sp.take_profits is not None:
+                for t_p in sp.take_profits:
+                    take_profits.append(json.dumps(t_p, cls=DecimalEncoder))
+
+            tp_hit = list()
+            if sp.tp_hit is not None:
+                for tp_hit_item in sp.tp_hit:
+                    tp_hit.append(json.dumps(tp_hit_item, cls=MessagePropsEncoder))
+
+
+            return {
+                "id" : sp.id_,
+                "is_buy" : sp.is_buy,
+                "exit" : exit_,
+                "is_sl_tp_delayed" : sp.is_sl_tp_delayed,
+                "move_sl_to_entry" : move_sl_to_entry,
+                "move_sl_to_profit" : json.dumps(move_sl_to_profit),
+                "price" : json.dumps(sp.price, cls=DecimalEncoder),
+                "sl_hit" : sl_hit,
+                "stop_loss" : json.dumps(sp.stop_loss, cls=DecimalEncoder),
+                "take_profits" : json.dumps(take_profits),
+                "tp_hit" : json.dumps(tp_hit),
+                "update_date" : sp.update_date }
+        return json.JSONEncoder.default(self, obj)
 
 
 class SQLite():

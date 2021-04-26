@@ -32,7 +32,7 @@ if __name__ == "__main__":
     db_poll_thread.start()
 
     db_poll_forwarder = threading.Thread(target=forwarder_sync, daemon=True)
-    db_poll_forwarder.start()
+    # db_poll_forwarder.start()
 
     history_downloader = threading.Thread(
         target=db_stats.main_exec, args=[poll_event_sync], daemon=True)
@@ -44,5 +44,5 @@ if __name__ == "__main__":
     stop_flag.Value = True
 
     db_poll_thread.join()
-    db_poll_forwarder.join()
+    # db_poll_forwarder.join()
     history_downloader.join()

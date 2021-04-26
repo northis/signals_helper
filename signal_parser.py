@@ -3,6 +3,7 @@ import typing
 import logging
 import classes
 import config
+import json
 
 import helper
 
@@ -98,6 +99,11 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
             root_messages[id_] = signal
             last_signal = signal
 
+        root_messages_view = list()
+        for r_m in root_messages.values():
+            root_messages_view.append(json.dumps(r_m, cls=classes.SignalPropsEncoder))
+
+    config.set_json("C:/Users/user/Desktop/1289623401.json", root_messages_view)
     return order_book_symbol
 
 
