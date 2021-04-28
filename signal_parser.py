@@ -99,13 +99,15 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
             root_messages[id_] = signal
             last_signal = signal
 
-        root_messages_view = list()
-        for r_m in root_messages.values():
-            root_messages_view.append(json.dumps(r_m, cls=classes.SignalPropsEncoder))
-
-    config.set_json("C:/Users/user/Desktop/1289623401.json", root_messages_view)
+    set_json("C:/Users/user/Desktop/1125658955+.json", root_messages)
     return order_book_symbol
 
+def set_json(file, json_object):
+    enc = classes.SignalPropsEncoder()
+    with open(file, 'w', encoding="utf-8") as f:
+        json.dump(obj=json_object, fp=f, indent=2,
+                  sort_keys=True, ensure_ascii=False,
+                  default=lambda a: enc.default(a))
 
 def str_to_utc_iso_datetime(dt):
     return helper.str_to_utc_iso_datetime(dt, config.DT_INPUT_TIMEZONE, config.DT_INPUT_FORMAT)
@@ -128,7 +130,7 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
         text = ""
 
     signal = classes.SignalProps()
-    signal.is_buy = re.match(BUY_REGEX, text) != None
+    signal.is_buy = re.search(BUY_REGEX, text) != None
     signal.date = date
     signal.id_ = id_
 

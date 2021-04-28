@@ -95,7 +95,8 @@ def analyze_history(wait_event: threading.Event):
 
     # 1295992076
     # 1428566201
-    analyze_channel(wait_event, 1289623401)
+    # analyze_channel(wait_event, 1289623401)
+    analyze_channel(wait_event, 1125658955)
     # for channel_id in channels_ids:
     #     analyze_channel(wait_event, channel_id[0])
 
