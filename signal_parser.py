@@ -83,30 +83,32 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
 
         for msg in found_messages:
             id_ = msg["id"]
-            reply_to_message_id = msg.get("reply_to_message_id")
+            reply_to_message_id = msg.get("reply_to_msg_id")
             is_reply = reply_to_message_id is not None
             root_message = None
 
             if is_reply:
-                root_message = root_messages[id_]
-            else:
-                root_message = last_signal
+                root_message = root_messages.get(reply_to_message_id)
+            # else:
+            #     root_message = last_signal
 
             signal = string_to_signal(msg, symbol_regex, root_message)
             if signal is None:
                 continue
 
             root_messages[id_] = signal
-            last_signal = signal
+            # last_signal = signal
+            # TODO get delayed singals to work
 
-    set_json("C:/Users/user/Desktop/1125658955+.json", root_messages)
+    # out_list = list(root_messages.values())
+    # set_json("C:/Users/user/Desktop/1125658955+.json", out_list)
     return order_book_symbol
 
 def set_json(file, json_object):
     enc = classes.SignalPropsEncoder()
     with open(file, 'w', encoding="utf-8") as f:
         json.dump(obj=json_object, fp=f, indent=2,
-                  sort_keys=True, ensure_ascii=False,
+                  sort_keys=False, ensure_ascii=False,
                   default=lambda a: enc.default(a))
 
 def str_to_utc_iso_datetime(dt):
@@ -133,6 +135,7 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
     signal.is_buy = re.search(BUY_REGEX, text) != None
     signal.date = date
     signal.id_ = id_
+    signal.text = text
 
     symbol_search = re.search(symbol_regex, text)
     signal_search = re.search(SIGNAL_REGEX, text)
@@ -154,6 +157,10 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
     if not is_signal and not is_reply:
         logging.debug(
             "Cannot get price from signal, ignore it. Message text isn't a signal and we don't have a reply")
+        return None
+
+    if not is_symbol:
+        logging.debug("Not a symbol we need")
         return None
 
     if is_signal and is_symbol:

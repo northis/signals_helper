@@ -77,8 +77,9 @@ class SignalProps(object):
         self.price = None
         self.take_profits = None
         self.stop_loss = None
-        self.date = ""
+        self.date = None
         self.update_date = ""
+        self.text = None
         self.move_sl_to_entry = None
         self.tp_hit = None
         self.move_sl_to_profit = None
@@ -90,7 +91,8 @@ class SignalProps(object):
     price = Optional[Decimal]
     take_profits = Optional[typing.List[Decimal]]
     stop_loss = Optional[Decimal]
-    date = str
+    date = Optional[str]
+    text = Optional[str]
     update_date = str
     move_sl_to_entry = Optional[MessageProps]
     tp_hit = Optional[typing.List[MessageProps]]
@@ -132,10 +134,12 @@ class SignalPropsEncoder(json.JSONEncoder):
             out_res = {
                 "id" : sp.id_,
                 "is_buy" : sp.is_buy,
+                "text" : sp.text,
                 "is_sl_tp_delayed" : sp.is_sl_tp_delayed,
                 "price" : decimal_encoder.default(sp.price),
                 "stop_loss" : decimal_encoder.default(sp.stop_loss),
-                "update_date" : sp.update_date }
+                "update_date" : sp.update_date,
+                "date" : sp.date }
 
             if sp.exit_ is not None:
                 exit_ = message_props_encoder.default(sp.exit_)
