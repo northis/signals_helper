@@ -120,7 +120,7 @@ def validate_order(order: dict, signal: classes.SignalProps, next_value: classes
             errors.append("wrong_tp_buy")
 
     else:
-        if signal.stop_loss > next_value:
+        if signal.stop_loss < next_value:
             logging.debug("Wrong stoploss (sell), close the order now")
             errors.append("wrong_sl_sell")
 
@@ -152,7 +152,7 @@ def update_orders(next_date: str, next_value: classes.Decimal, open_orders: list
 def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
     symbol_regex = symbols_regex_map[symbol]
 
-    order_book: list()
+    order_book = list()
     min_date_str = min_date.strftime(config.DB_DATE_FORMAT)
     max_date_str = max_date.strftime(config.DB_DATE_FORMAT)
 
@@ -192,8 +192,7 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
             next_value[0], input_format=config.DB_DATE_FORMAT).isoformat()
 
         orders_open = list(filter(lambda x:
-                                  x["is_open"] is True and
-                                  x["symbol"] == symbol, order_book))
+                                  x["is_open"] is True, order_book))
 
         found_messages = list(filter(lambda x:
                                      x["date"] >= current_date_str and
@@ -227,7 +226,11 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
             if signal is None:
                 continue
 
-            root_messages[id_] = root_message
+            if root_message is None and signal.is_signal:
+                root_message = signal
+
+            if root_message is not None:
+                root_messages[id_] = root_message
 
             signal_to_orders(signal, next_date_str, value_close, order_book)
 
@@ -356,6 +359,8 @@ def string_to_signal(
         if is_tp_hit:
             if reply_to.tp_hit is None:
                 reply_to.tp_hit = list()
+                reply_to.move_sl_to_entry = reply_message
+                # If we hit TP (1), we move sl to breakeven too.
 
             reply_to.tp_hit.append(reply_message)
 

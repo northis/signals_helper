@@ -78,9 +78,66 @@ def analyze_channel(wait_event: threading.Event, channel_id):
             config.CHANNELS_ANALYSIS_DIR, f"{channel_id}.{symbol}.signals.json")
         save_signals_json(save_path_signals, signals_list)
 
-        save_path_orders = os.path.join(
-            config.CHANNELS_ANALYSIS_DIR, f"{channel_id}.{symbol}.orders.json")
-        config.set_json(save_path_orders, orders_list)
+        with classes.SQLite(config.DB_STATS_PATH, 'analyze_channel:', lock) as cur:
+            exec_string = f"DELETE FROM 'Order' WHERE IdChannel = {channel_id}"
+            cur.execute(exec_string)
+
+            for order in orders_list:
+                order_id = order["id"]
+                date = order["datetime"]
+                price_signal = str(order["price_signal"])
+                price_actual = str(order["price_actual"])
+                is_open = 0
+                is_buy = 0
+                manual_exit = 0
+                sl_exit = 0
+                tp_exit = 0
+
+                stop_loss = "NULL"
+                if "stop_loss" in order:
+                    stop_loss = str(order["stop_loss"])
+
+                take_profit = "NULL"
+                if "take_profit" in order:
+                    take_profit = str(order["take_profit"])
+
+                close_datetime = "NULL"
+                if "close_datetime" in order:
+                    close_datetime = order["close_datetime"]
+
+                last_sl_move = "NULL"
+                if "last_sl_move" in order:
+                    last_sl_move = order["last_sl_move"]
+
+                close_price = "NULL"
+                if "close_price" in order:
+                    close_price = str(order["close_price"])
+
+                close_datetime = "NULL"
+                if "close_datetime" in order:
+                    close_datetime = order["close_datetime"]
+
+                error_state = "NULL"
+                if "error_state" in order:
+                    error_state = ";".join(order["error_state"])
+
+                if order["is_buy"]:
+                    is_buy = 1
+
+                if order["is_open"]:
+                    is_open = 1
+
+                if "manual_exit" in order and order["manual_exit"]:
+                    manual_exit = 1
+
+                if "sl_exit" in order and order["sl_exit"]:
+                    sl_exit = 1
+
+                if "tp_exit" in order and order["tp_exit"]:
+                    tp_exit = 1
+
+                exec_string = f"INSERT INTO 'Order' VALUES ({channel_id},'{symbol}',{order_id},{is_buy},'{date}', '{price_signal}','{price_actual}',{is_open}, '{stop_loss}', '{take_profit}', '{close_datetime}', '{close_price}', '{last_sl_move}', {manual_exit}, {sl_exit}, {tp_exit}, '{error_state}')"
+                cur.execute(exec_string)
 
         order_book[symbol] = orders_list
 

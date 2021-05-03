@@ -200,3 +200,26 @@ CREATE UNIQUE INDEX "Channel_IdIndex" ON "ChannelMessageLink" (
 	"IdMessage"	ASC,
 	"IdChannel"	ASC
 );
+
+
+CREATE TABLE "Order"
+(
+	"IdChannel" INTEGER NOT NULL,
+	"Symbol" TEXT NOT NULL,
+	"IdOrder" INTEGER NOT NULL,
+	"IsBuy" INTEGER NOT NULL DEFAULT 0,
+	"Date" DATETIME NOT NULL,
+	"PriceSignal" NUMERIC,
+	"PriceActual" NUMERIC,
+	"IsOpen" INTEGER NOT NULL DEFAULT 0,
+	"StopLoss" NUMERIC,
+	"TakeProfit" NUMERIC,
+	"CloseDate" DATETIME,
+	"ClosePrice" NUMERIC,
+	"LastSlMove" DATETIME,
+	"ManualExit" NUMERIC DEFAULT 0,
+	"SlExit" NUMERIC DEFAULT 0,
+	"TpExit" NUMERIC DEFAULT 0,
+	"ErrorState" TEXT,
+	FOREIGN KEY("IdChannel") REFERENCES "Channel"("Id")
+);
