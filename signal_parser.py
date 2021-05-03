@@ -110,9 +110,10 @@ def signal_to_orders(signal: classes.SignalProps, next_date: str, next_value: cl
 def validate_order(order: dict, signal: classes.SignalProps, next_value: classes.Decimal):
     errors = list()
     take_profit = order.get("take_profit")
+    stop_loss = order.get("stop_loss")
 
     if signal.is_buy:
-        if signal.stop_loss > next_value:
+        if stop_loss is not None and stop_loss > next_value:
             logging.debug("Wrong stoploss (buy), close the order now")
             errors.append("wrong_sl_buy")
 
@@ -120,7 +121,7 @@ def validate_order(order: dict, signal: classes.SignalProps, next_value: classes
             errors.append("wrong_tp_buy")
 
     else:
-        if signal.stop_loss < next_value:
+        if stop_loss is not None and stop_loss < next_value:
             logging.debug("Wrong stoploss (sell), close the order now")
             errors.append("wrong_sl_sell")
 
