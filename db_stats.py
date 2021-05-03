@@ -2,6 +2,7 @@ import asyncio
 import sqlite3
 import threading
 import logging
+import json
 import traceback
 import os
 import datetime
@@ -70,14 +71,30 @@ def analyze_channel(wait_event: threading.Event, channel_id):
         logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
                      channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
 
-        res = signal_parser.analyze_channel_symbol(
+        (signals_list, orders_list) = signal_parser.analyze_channel_symbol(
             ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
 
-        order_book[symbol] = res
+        save_path_signals = os.path.join(
+            config.CHANNELS_ANALYSIS_DIR, f"{channel_id}.{symbol}.signals.json")
+        save_signals_json(save_path_signals, signals_list)
+
+        save_path_orders = os.path.join(
+            config.CHANNELS_ANALYSIS_DIR, f"{channel_id}.{symbol}.orders.json")
+        config.set_json(save_path_orders, orders_list)
+
+        order_book[symbol] = orders_list
 
         if wait_event.is_set():
             return order_book
     return order_book
+
+
+def save_signals_json(file, json_object):
+    enc = classes.SignalPropsEncoder()
+    with open(file, 'w', encoding="utf-8") as f:
+        json.dump(obj=json_object, fp=f, indent=2,
+                  sort_keys=False, ensure_ascii=False,
+                  default=lambda a: enc.default(a))
 
 
 def analyze_history(wait_event: threading.Event):

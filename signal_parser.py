@@ -1,9 +1,8 @@
 import re
-import typing
 import logging
 import classes
 import config
-import json
+import copy
 
 import helper
 
@@ -22,13 +21,138 @@ TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"buy"
 
-signals: typing.Dict[int, classes.SignalProps] = dict()
+
+def signal_to_orders(signal: classes.SignalProps, next_date: str, next_value: classes.Decimal, order_book: list):
+    if not signal.is_signal:
+        logging.debug("Cannot convert to order non-signal entity")
+        return
+
+    order = None
+    is_exit = signal.exit_ is not None
+    is_move_sl_to_entry = signal.move_sl_to_entry is not None
+    is_move_sl_to_profit = signal.move_sl_to_profit is not None
+    is_tp_hit = signal.tp_hit is not None
+    is_sl_hit = signal.sl_hit is not None
+    is_buy = signal.is_buy
+
+    is_initial_signal = not(
+        is_exit or is_move_sl_to_entry or is_move_sl_to_profit)
+
+    if is_initial_signal:
+        order = {}
+        order["id"] = signal.id_
+        order["is_buy"] = is_buy
+        order["datetime"] = next_date
+        order["price_signal"] = signal.price
+        order["price_actual"] = next_value
+        order["is_open"] = True
+
+        if signal.stop_loss is not None:
+            order["stop_loss"] = signal.stop_loss
+
+        if signal.take_profits is not None:
+            take_profits_len = len(signal.take_profits)
+            if take_profits_len == 1:
+                order["take_profit"] = signal.take_profits[0]
+            elif take_profits_len > 1:
+                for t_p in signal.take_profits:
+                    tp_order = copy.deepcopy(order)
+                    tp_order["take_profit"] = t_p
+                    validate_order(tp_order, signal, next_value)
+                    order_book.append(tp_order)
+
+        validate_order(order, signal, next_value)
+        order_book.append(order)
+        return
+
+    related_orders = list(
+        filter(lambda x: x["id"] == signal.id_ and x["is_open"] is True, order_book))
+
+    if len(related_orders) == 0:
+        logging.debug("No related orders found")
+        return
+
+    for related_order in related_orders:
+        if is_move_sl_to_entry:
+            related_order["stop_loss"] = related_order["price_actual"]
+            related_order["close_datetime"] = next_date
+
+        if is_move_sl_to_profit:
+            if is_buy:
+                order["stop_loss"] = max(
+                    signal.move_sl_to_profit, key=lambda x: float(x.price))
+            else:
+                order["stop_loss"] = min(
+                    signal.move_sl_to_profit, key=lambda x: float(x.price))
+            related_order["last_sl_move"] = next_date
+
+        if is_exit or is_sl_hit:
+            order["close_price"] = next_value
+            order["close_datetime"] = next_date
+            order["is_open"] = False
+
+        if is_exit:
+            order["manual_exit"] = True
+
+        if is_sl_hit:
+            order["sl_exit"] = True
+
+        if is_tp_hit:
+            if is_buy and order["take_profit"] > next_value or (not is_buy) and order["take_profit"] < next_value:
+                order["close_price"] = next_value
+                order["close_datetime"] = next_date
+                order["is_open"] = False
+                order["tp_exit"] = True
+
+        validate_order(related_order, signal, next_value)
+
+
+def validate_order(order: dict, signal: classes.SignalProps, next_value: classes.Decimal):
+    errors = list()
+    take_profit = order.get("take_profit")
+
+    if signal.is_buy:
+        if signal.stop_loss > next_value:
+            logging.debug("Wrong stoploss (buy), close the order now")
+            errors.append("wrong_sl_buy")
+
+        if take_profit is not None and take_profit < order["price_actual"]:
+            errors.append("wrong_tp_buy")
+
+    else:
+        if signal.stop_loss > next_value:
+            logging.debug("Wrong stoploss (sell), close the order now")
+            errors.append("wrong_sl_sell")
+
+        if take_profit is not None and take_profit > order["price_actual"]:
+            errors.append("wrong_tp_sell")
+
+    if len(errors) > 0:
+        order["error_state"] = errors
+        order["is_open"] = False
+
+
+def update_orders(next_date: str, next_value: classes.Decimal, open_orders: list):
+    for order in open_orders:
+        stop_loss = order.get("stop_loss")
+        take_profit = order.get("take_profit")
+
+        buy_close_cond = order["is_buy"] and (
+            stop_loss is not None and next_value <= stop_loss or take_profit is not None and next_value >= take_profit)
+        sell_close_cond = (not order["is_buy"]) and (
+            stop_loss is not None and next_value >= stop_loss or take_profit is not None and next_value <= take_profit)
+
+        if buy_close_cond or sell_close_cond:
+            order["auto_hit"] = True
+            order["close_price"] = next_value
+            order["close_datetime"] = next_date
+            order["is_open"] = False
 
 
 def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
     symbol_regex = symbols_regex_map[symbol]
-    order_book_symbol = list()
 
+    order_book: list()
     min_date_str = min_date.strftime(config.DB_DATE_FORMAT)
     max_date_str = max_date.strftime(config.DB_DATE_FORMAT)
 
@@ -51,6 +175,9 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
 
     symbol_data_len = len(symbol_data)
     i = 0
+    current_date_str = None
+    next_date_str = None
+
     for symbol_value in symbol_data:
         if i < symbol_data_len-1:
             next_value = symbol_data[i + 1]
@@ -59,12 +186,14 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
 
         i += 1
 
-        current_date_str = symbol_value[0]
-        next_date_str = next_value[0]
+        current_date_str = helper.str_to_utc_datetime(
+            symbol_value[0], input_format=config.DB_DATE_FORMAT).isoformat()
+        next_date_str = helper.str_to_utc_datetime(
+            next_value[0], input_format=config.DB_DATE_FORMAT).isoformat()
 
         orders_open = list(filter(lambda x:
                                   x["is_open"] is True and
-                                  x["symbol"] == symbol, order_book_symbol))
+                                  x["symbol"] == symbol, order_book))
 
         found_messages = list(filter(lambda x:
                                      x["date"] >= current_date_str and
@@ -76,10 +205,12 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
         if not has_messages_in_min and not has_orders_open:
             continue
 
-        # if has_orders_open:
-        #     for order in orders_open:
-        #         if order["is_buy"] is True:
-        #             print("buy")
+        # We decide that this and appropriate time to catch up a signal -
+        # close of current minute and time of text minute starts (next_date_str)
+        value_close = symbol_value[3]
+
+        if has_orders_open:
+            update_orders(next_date_str, value_close, orders_open)
 
         for msg in found_messages:
             id_ = msg["id"]
@@ -89,33 +220,34 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
 
             if is_reply:
                 root_message = root_messages.get(reply_to_message_id)
-            # else:
-            #     root_message = last_signal
+            else:
+                root_message = last_signal
 
             signal = string_to_signal(msg, symbol_regex, root_message)
             if signal is None:
                 continue
 
-            root_messages[id_] = signal
-            # last_signal = signal
-            # TODO get delayed singals to work
+            root_messages[id_] = root_message
 
-    # out_list = list(root_messages.values())
-    # set_json("C:/Users/user/Desktop/1125658955+.json", out_list)
-    return order_book_symbol
+            signal_to_orders(signal, next_date_str, value_close, order_book)
 
-def set_json(file, json_object):
-    enc = classes.SignalPropsEncoder()
-    with open(file, 'w', encoding="utf-8") as f:
-        json.dump(obj=json_object, fp=f, indent=2,
-                  sort_keys=False, ensure_ascii=False,
-                  default=lambda a: enc.default(a))
+            if signal.is_sl_tp_delayed:
+                last_signal = signal
+            elif last_signal is not None and not last_signal.is_sl_tp_delayed:
+                last_signal = None
+
+    out_list = list(
+        filter(lambda x: x.is_signal is True, root_messages.values()))
+    return (out_list, order_book)
+
 
 def str_to_utc_iso_datetime(dt):
     return helper.str_to_utc_iso_datetime(dt, config.DT_INPUT_TIMEZONE, config.DT_INPUT_FORMAT)
 
 
-def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps):
+def string_to_signal(
+        msg: str, symbol_regex: str, reply_to: classes.SignalProps):
+
     id_: int = msg["id"]
     text: str = message_to_text(msg)
     date: str = msg["date"]
@@ -124,9 +256,6 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
         logging.debug(
             "Cannot get price from signal, ignore it. Message text is null and we don't have a reply")
         return None
-
-    if reply_to is not None:
-        reply_to.update_date = date
 
     if text is None:
         text = ""
@@ -152,7 +281,12 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
     is_tp = tp_search is not None
     is_close = close_search is not None
     is_breakeven = breakeven_search is not None
-    is_symbol = symbol_search is not None or (is_reply and is_signal)
+    is_symbol = symbol_search is not None or (is_reply and reply_to.is_signal)
+
+    signal.is_signal = is_signal
+
+    if is_reply:
+        reply_to.update_date = date
 
     if not is_signal and not is_reply:
         logging.debug(
@@ -163,7 +297,10 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
         logging.debug("Not a symbol we need")
         return None
 
-    if is_signal and is_symbol:
+    if is_signal:
+        if not is_sl or not is_tp:
+            signal.is_sl_tp_delayed = True
+
         # We want to parse signals with price only.
         price_dec = helper.str_to_decimal(signal_search.group(4))
         if price_dec is None:
@@ -173,6 +310,8 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
         signal.price = price_dec
 
     sl_dec: classes.Decimal = None
+
+    need_reset_delayed_flag = False
     if is_sl:
         sl_dec = helper.str_to_decimal(sl_search.group(1))
         if sl_dec is None:
@@ -180,6 +319,9 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
                 "Cannot get stoploss from signal, ignore it. Message text: %s", text)
             return None
         signal.stop_loss = sl_dec
+        if is_reply and reply_to.is_sl_tp_delayed:
+            need_reset_delayed_flag = True
+
     elif not is_reply:
         signal.is_sl_tp_delayed = True
 
@@ -192,6 +334,11 @@ def string_to_signal(msg: str, symbol_regex: str, reply_to: classes.SignalProps)
             take_profits.append(tp_dec)
 
         signal.take_profits = take_profits
+        if is_reply and reply_to.is_sl_tp_delayed:
+            need_reset_delayed_flag = True
+
+    if need_reset_delayed_flag:
+        reply_to.is_sl_tp_delayed = False
 
     if is_reply:
         reply_message = classes.MessageProps()

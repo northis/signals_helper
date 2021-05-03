@@ -73,6 +73,7 @@ class SignalProps(object):
     def __init__(self):
         self.id_ = 0
         self.is_buy = None
+        self.is_signal = False
         self.is_sl_tp_delayed = False
         self.price = None
         self.take_profits = None
@@ -87,6 +88,7 @@ class SignalProps(object):
         self.exit_ = None
     id_ = int
     is_buy = Optional[bool]
+    is_signal = bool
     is_sl_tp_delayed = bool
     price = Optional[Decimal]
     take_profits = Optional[typing.List[Decimal]]
@@ -109,13 +111,14 @@ class DecimalEncoder(json.JSONEncoder):
             return 0
         return json.JSONEncoder.default(self, obj)
 
+
 class MessagePropsEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, MessageProps):
             decimal_encoder = DecimalEncoder()
             mp: MessageProps() = obj
 
-            return {"id" : mp.id_,
+            return {"id": mp.id_,
                     "date": mp.date,
                     "price": decimal_encoder.default(mp.price),
                     "reply_to_message_id": mp.reply_to_message_id,
@@ -132,31 +135,33 @@ class SignalPropsEncoder(json.JSONEncoder):
             sp: SignalProps = obj
 
             out_res = {
-                "id" : sp.id_,
-                "is_buy" : sp.is_buy,
-                "text" : sp.text,
-                "is_sl_tp_delayed" : sp.is_sl_tp_delayed,
-                "price" : decimal_encoder.default(sp.price),
-                "stop_loss" : decimal_encoder.default(sp.stop_loss),
-                "update_date" : sp.update_date,
-                "date" : sp.date }
+                "id": sp.id_,
+                "is_buy": sp.is_buy,
+                "is_signal": sp.is_signal,
+                "text": sp.text,
+                "is_sl_tp_delayed": sp.is_sl_tp_delayed,
+                "price": decimal_encoder.default(sp.price),
+                "stop_loss": decimal_encoder.default(sp.stop_loss),
+                "update_date": sp.update_date,
+                "date": sp.date}
 
             if sp.exit_ is not None:
                 exit_ = message_props_encoder.default(sp.exit_)
                 out_res["exit"] = exit_
 
             if sp.move_sl_to_entry is not None:
-                move_sl_to_entry = message_props_encoder.default(sp.move_sl_to_entry)
+                move_sl_to_entry = message_props_encoder.default(
+                    sp.move_sl_to_entry)
                 out_res["move_sl_to_entry"] = move_sl_to_entry
-            
 
             if sp.move_sl_to_profit is not None:
                 move_sl_to_profit = list()
-                for move_sl in sp.move_sl_to_profit:   
-                    move_sl_to_profit.append(message_props_encoder.default(move_sl))
+                for move_sl in sp.move_sl_to_profit:
+                    move_sl_to_profit.append(
+                        message_props_encoder.default(move_sl))
                 out_res["move_sl_to_profit"] = move_sl_to_profit
-            
-            if sp.sl_hit is not None:                
+
+            if sp.sl_hit is not None:
                 sl_hit = message_props_encoder.default(sp.sl_hit)
                 out_res["sl_hit"] = sl_hit
 
