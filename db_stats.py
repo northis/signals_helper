@@ -50,8 +50,6 @@ def analyze_channel(wait_event: threading.Event, channel_id):
     max_channel_date = helper.str_to_utc_datetime(
         ordered_messges[len(ordered_messges)-1]["date"])
 
-    order_book = dict()
-
     for symbol in signal_parser.symbols_regex_map:
         min_date = db_poll.db_time_ranges[symbol][0]
         max_date = db_poll.db_time_ranges[symbol][1]
@@ -139,11 +137,12 @@ def analyze_channel(wait_event: threading.Event, channel_id):
                 exec_string = f"INSERT INTO 'Order' VALUES ({channel_id},'{symbol}',{order_id},{is_buy},'{date}', '{price_signal}','{price_actual}',{is_open}, '{stop_loss}', '{take_profit}', '{close_datetime}', '{close_price}', '{last_sl_move}', {manual_exit}, {sl_exit}, {tp_exit}, '{error_state}')"
                 cur.execute(exec_string)
 
-        order_book[symbol] = orders_list
+                now_str = helper.get_now_utc_iso()
+                update_string = f"UPDATE Channel SET HistoryAnalyzed = 1, HistoryAnalysisUpdateDate = '{now_str}' WHERE Id={channel_id}"
+                cur.execute(update_string)
 
         if wait_event.is_set():
-            return order_book
-    return order_book
+            return
 
 
 def save_signals_json(file, json_object):

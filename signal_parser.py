@@ -8,8 +8,10 @@ import helper
 
 symbols_regex_map = {}
 symbols_regex_map[classes.Symbol.XAUUSD] = "(gold)|(xau)|(xauusd)"
-symbols_regex_map[classes.Symbol.BTCUSD] = "(btc)|(btcusd)|(btcusdt)|(bitcoin)"
-symbols_regex_map[classes.Symbol.EURUSD] = "(eurusd)"
+# symbols_regex_map[classes.Symbol.BTCUSD] = "(btc)|(btcusd)|(btcusdt)|(bitcoin)"
+# symbols_regex_map[classes.Symbol.EURUSD] = "(eurusd)"
+# TODO some issues in parsing eurusd 1.xxx prices, going to resolve it in the future, now I wanna focus on gold only
+
 
 SIGNAL_REGEX = r"((buy)|(sel[l]?))[\D]*([0-9]{1,8}[.,]?[0-9]{0,5})"
 TP_REGEX = r"tp\s?\d?[\D]+([0-9]{1,8}[.,]?[0-9]{0,5})"
