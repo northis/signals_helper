@@ -1,0 +1,12 @@
+[Unit]
+Description=Signal Channel Forwarder
+After=multi-user.target
+
+[Service]
+User=nrth
+Type=simple
+WorkingDirectory=/home/user/signals_helper
+ExecStart=/usr/bin/python3.9 /home/user/signals_helper/main.py
+
+[Install]
+WantedBy=multi-user.target

@@ -1,3 +1,5 @@
+#!/usr/bin/python3.9
+
 import threading
 import asyncio
 import logging
