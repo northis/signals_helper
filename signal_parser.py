@@ -75,6 +75,18 @@ def signal_to_orders(signal: classes.SignalProps, next_date: str, next_value: cl
         return
 
     for related_order in related_orders:
+        if is_tp_hit:
+            if is_buy and order["take_profit"] > next_value or (not is_buy) and order["take_profit"] < next_value:
+                order["close_price"] = next_value
+                order["close_datetime"] = next_date
+                order["is_open"] = False
+                order["tp_exit"] = True
+                is_move_sl_to_entry = True  # We set all the related orders to breakeven if one TP hit
+
+    related_orders = list(
+        filter(lambda x: x["is_open"] is True, related_orders))
+
+    for related_order in related_orders:
         if is_move_sl_to_entry:
             related_order["stop_loss"] = related_order["price_actual"]
             related_order["close_datetime"] = next_date
@@ -98,13 +110,6 @@ def signal_to_orders(signal: classes.SignalProps, next_date: str, next_value: cl
 
         if is_sl_hit:
             order["sl_exit"] = True
-
-        if is_tp_hit:
-            if is_buy and order["take_profit"] > next_value or (not is_buy) and order["take_profit"] < next_value:
-                order["close_price"] = next_value
-                order["close_datetime"] = next_date
-                order["is_open"] = False
-                order["tp_exit"] = True
 
         validate_order(related_order, signal, next_value)
 
