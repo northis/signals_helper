@@ -167,7 +167,8 @@ def analyze_history(wait_event: threading.Event):
         channels_ids = cur.execute(exec_string).fetchall()
 
     for channel_id in channels_ids:
-        analyze_channel(wait_event, channel_id[0])
+        local_channel_id = channel_id[0]
+        analyze_channel(wait_event, local_channel_id)
 
 
 async def bulk_exit(client):

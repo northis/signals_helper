@@ -302,13 +302,13 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
             break
 
     is_signal = re.search(SIGNAL_REGEX, message_text) is not None
-    has_photo = message.photo is not None
+    # has_photo = message.photo is not None
     is_primary = (is_primary or is_tradingview) and contains_no_links and (
-        message.is_reply or is_signal or has_photo)
+        message.is_reply or is_signal)
 
     logging.info(
-        'Message %s (contains_no_links=%s, is_signal=%s, has_photo=%s)',
-        message.id, contains_no_links, is_signal, has_photo)
+        'Message %s (contains_no_links=%s, is_signal=%s)',
+        message.id, contains_no_links, is_signal)
 
     try:
         if is_primary:

@@ -22,6 +22,7 @@ SL_HIT_REGEX = r"(sl)|(stoplos[s]?).*hit"
 TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"buy"
+PRICE_VALID_PERCENT = 10
 
 
 def signal_to_orders(signal: classes.SignalProps, next_date: str, next_value: classes.Decimal, order_book: list):
@@ -63,8 +64,9 @@ def signal_to_orders(signal: classes.SignalProps, next_date: str, next_value: cl
                     validate_order(tp_order, signal, next_value)
                     order_book.append(tp_order)
 
-        validate_order(order, signal, next_value)
-        order_book.append(order)
+        if take_profits_len <= 1:
+            validate_order(order, signal, next_value)
+            order_book.append(order)
         return
 
     related_orders = list(
@@ -118,21 +120,30 @@ def validate_order(order: dict, signal: classes.SignalProps, next_value: classes
     errors = list()
     take_profit = order.get("take_profit")
     stop_loss = order.get("stop_loss")
+    has_sl = stop_loss is not None
+    has_tp = take_profit is not None
+    next_value_fl = float(next_value)
+
+    if has_sl and (100*abs(float(stop_loss) - next_value_fl)/next_value_fl > PRICE_VALID_PERCENT):
+        errors.append("wrong_sl")
+
+    if has_tp and (100*abs(float(take_profit) - next_value_fl)/next_value_fl > PRICE_VALID_PERCENT):
+        errors.append("wrong_tp")
 
     if signal.is_buy:
-        if stop_loss is not None and stop_loss > next_value:
-            logging.debug("Wrong stoploss (buy), close the order now")
+        if has_sl and stop_loss > next_value:
+            logging.debug("Wrong stoploss (buy)")
             errors.append("wrong_sl_buy")
 
-        if take_profit is not None and take_profit < order["price_actual"]:
+        if has_tp and take_profit < next_value:
             errors.append("wrong_tp_buy")
 
     else:
-        if stop_loss is not None and stop_loss < next_value:
-            logging.debug("Wrong stoploss (sell), close the order now")
+        if has_sl and stop_loss < next_value:
+            logging.debug("Wrong stoploss (sell)")
             errors.append("wrong_sl_sell")
 
-        if take_profit is not None and take_profit > order["price_actual"]:
+        if has_tp and take_profit > next_value:
             errors.append("wrong_tp_sell")
 
     if len(errors) > 0:
