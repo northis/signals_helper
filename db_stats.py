@@ -14,6 +14,7 @@ import helper
 import forwarder
 import db_poll
 import signal_parser
+from multiprocessing.pool import ThreadPool
 
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
@@ -39,7 +40,17 @@ async def process_history(wait_event: threading.Event):
 
 def analyze_channel(wait_event: threading.Event, channel_id):
     out_path = os.path.join(config.CHANNELS_HISTORY_DIR, f"{channel_id}.json")
-    messages = config.get_json(out_path)
+    messages = None
+    try:
+        messages = config.get_json(out_path)
+    except Exception as ex:
+        logging.error('analyze_channel: %s, error: %s',
+                      ex, traceback.format_exc())
+        with classes.SQLite(config.DB_STATS_PATH, 'analyze_channel_error:', lock) as cur:
+            update_string = f"UPDATE Channel SET HistoryLoaded = 0 WHERE Id={channel_id}"
+            cur.execute(update_string)
+        return
+
     if messages is None or len(messages) < 1:
         logging.info('analyze_channel: no data from %s', out_path)
 
@@ -166,9 +177,13 @@ def analyze_history(wait_event: threading.Event):
     with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
         channels_ids = cur.execute(exec_string).fetchall()
 
+    channels_total = len(channels_ids)
+    channels_ready = 0
     for channel_id in channels_ids:
         local_channel_id = channel_id[0]
         analyze_channel(wait_event, local_channel_id)
+        channels_ready += 1
+        print(f"Channels analyzed {channels_ready} from {channels_total}")
 
 
 async def bulk_exit(client):
