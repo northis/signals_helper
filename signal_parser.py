@@ -3,6 +3,7 @@ import logging
 import classes
 import config
 import copy
+import threading
 
 import helper
 
@@ -18,7 +19,7 @@ TP_REGEX = r"tp\s?\d?[\D]+([0-9]{1,8}[.,]?[0-9]{0,5})"
 SL_REGEX = r"sl[\D]*([0-9]{1,8}\.?[0-9]{0,5})"
 # PRICE_REGEX = r"([0-9]{4}\.?[0-9]{0,2})"
 BREAKEVEN_REGEX = r"(book)|(entry point)|(breakeven)"
-SL_HIT_REGEX = r"(sl)|(stoplos[s]?).*hit"
+SL_HIT_REGEX = r"(sl|stoplos[s]?)(.)*hit"
 TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"buy"
@@ -77,7 +78,7 @@ def update_orders(next_date: str, next_value: classes.Decimal, open_orders: list
             order["is_open"] = False
 
 
-def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
+def analyze_channel_symbol(wait_event: threading.Event, ordered_messges, symbol, min_date, max_date):
     symbol_regex = symbols_regex_map[symbol]
 
     order_book = list()
@@ -110,6 +111,9 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
         else:
             break
 
+        if wait_event.is_set():
+            return
+
         i += 1
 
         current_date_str = helper.str_to_utc_datetime(
@@ -140,16 +144,13 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
         for msg in found_messages:
             id_ = msg["id"]
 
-            if id_ == 2923:
-                print("2923")
-
             reply_to_message_id = msg.get("reply_to_msg_id")
             is_reply = reply_to_message_id is not None
             target_orders = None
 
             if is_reply:
                 reply_sources = list(
-                    filter(lambda x: x["is"] == id_, orders_open))
+                    filter(lambda x: x["id"] == reply_to_message_id, orders_open))
                 target_orders = reply_sources
             else:
                 target_orders = orders_open
@@ -200,9 +201,9 @@ def string_to_orders(
     is_tp_hit = tp_hit_search is not None
     is_sl_hit = sl_hit_search is not None
     is_tp = tp_search is not None and len(tp_search) > 0
-    is_close = close_search is not None
     # If we hit TP (1), we move sl to breakeven too.
     is_breakeven = breakeven_search is not None or is_tp_hit
+    is_close = close_search is not None and breakeven_search is None
     is_symbol = symbol_search is not None or (
         has_target_orders and is_signal)
 
@@ -257,6 +258,12 @@ def string_to_orders(
                 order_book.append(tp_order)
 
         validate_order(order, next_value)
+
+        if order["is_open"]:
+            breakeven_order = copy.deepcopy(order)
+            breakeven_order["for_breakeven"] = True
+            order_book.append(breakeven_order)
+
         order_book.append(order)
         return
 
@@ -276,16 +283,19 @@ def string_to_orders(
             if tp_dec is not None:
                 target_order["take_profit"] = tp_dec
 
+        is_close_local = is_close
         if is_breakeven and target_order.get("has_breakeven") is None:
-            target_order["stop_loss"] = target_order["price_actual"]
-            target_order["breakeven_datetime"] = next_date
-            target_order["breakeven_price"] = target_order["price_actual"]
+            target_order["has_breakeven"] = True
+            if target_order.get("for_breakeven") is None:
+                target_order["stop_loss"] = target_order["price_actual"]
+            else:
+                is_close_local = True
 
-        if is_close or is_sl_hit or is_tp_hit:
+        if is_close_local or is_sl_hit or is_tp_hit:
             target_order["close_price"] = next_value
             target_order["close_datetime"] = next_date
             target_order["is_open"] = False
-        if is_close:
+        if is_close_local:
             target_order["manual_exit"] = True
         if is_sl_hit:
             target_order["sl_exit"] = True

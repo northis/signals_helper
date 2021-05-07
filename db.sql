@@ -216,7 +216,6 @@ CREATE TABLE "Order"
 	"TakeProfit" NUMERIC,
 	"CloseDate" DATETIME,
 	"ClosePrice" NUMERIC,
-	"LastSlMove" DATETIME,
 	"ManualExit" NUMERIC DEFAULT 0,
 	"SlExit" NUMERIC DEFAULT 0,
 	"TpExit" NUMERIC DEFAULT 0,

@@ -6,6 +6,9 @@ import json
 import traceback
 import os
 import datetime
+from concurrent.futures import ThreadPoolExecutor
+from multiprocessing import Queue
+import queue
 from telethon import TelegramClient, errors, functions
 import classes
 import config
@@ -14,18 +17,24 @@ import helper
 import forwarder
 import db_poll
 import signal_parser
-from multiprocessing.pool import ThreadPool
 
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 lock = threading.Lock()
+queue_orders = Queue()
+executor = ThreadPoolExecutor(max_workers=10)
+WAIT_EVENT_INNER = threading.Event()
 
 
 async def process_history(wait_event: threading.Event):
+    db_save_orders = threading.Thread(target=orders_to_db, daemon=True)
+    db_save_orders.start()
+
     while not wait_event.is_set():
         try:
             await asyncio.sleep(5)  # wait for data
             analyze_history(wait_event)
+
         except Exception as ex:
             logging.error('analyze_history: %s, error: %s',
                           ex, traceback.format_exc())
@@ -36,6 +45,8 @@ async def process_history(wait_event: threading.Event):
                           ex, traceback.format_exc())
         wait_event.clear()
         wait_event.wait(STATS_COLLECT_SEC)
+    WAIT_EVENT_INNER.set()
+    db_save_orders.join()
 
 
 def analyze_channel(wait_event: threading.Event, channel_id):
@@ -79,77 +90,79 @@ def analyze_channel(wait_event: threading.Event, channel_id):
 
         logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
                      channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
+        res_exec = executor.submit(process_channel_symbol, wait_event, ordered_messges,
+                                   symbol, min_date_rounded_minutes, max_date_rounded_minutes, channel_id)
+        logging.info('analyze_channel: result_exec_aync: %s', res_exec)
 
-        orders_list = signal_parser.analyze_channel_symbol(
-            ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
+        if wait_event.is_set():
+            return
+
+
+def process_channel_symbol(
+        wait_event,
+        ordered_messges,
+        symbol,
+        min_date_rounded_minutes,
+        max_date_rounded_minutes,
+        channel_id):
+    orders_list = signal_parser.analyze_channel_symbol(
+        wait_event, ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
+    queue_orders.put_nowait((orders_list, symbol, channel_id))
+
+
+def orders_to_db():
+    while (not WAIT_EVENT_INNER.is_set()):
+        typle_from_queue = None
+        try:
+            typle_from_queue = queue_orders.get_nowait()
+        except queue.Empty:
+            WAIT_EVENT_INNER.clear()
+            WAIT_EVENT_INNER.wait(STATS_COLLECT_LOOP_GAP_SEC)
+            continue
+
+        orders_list = typle_from_queue[0]
+        symbol = typle_from_queue[1]
+        channel_id = typle_from_queue[2]
 
         with classes.SQLite(config.DB_STATS_PATH, 'analyze_channel:', lock) as cur:
             exec_string = f"DELETE FROM 'Order' WHERE IdChannel = {channel_id}"
             cur.execute(exec_string)
 
             for order in orders_list:
-                order_id = order["id"]
-                date = order["datetime"]
-                price_signal = str(order["price_signal"])
-                price_actual = str(order["price_actual"])
-                is_open = 0
-                is_buy = 0
-                manual_exit = 0
-                sl_exit = 0
-                tp_exit = 0
+                params = {}
+                params["IdOrder"] = order["id"]
+                params["IdChannel"] = channel_id
+                params["Symbol"] = symbol
+                params["IsBuy"] = 1 if order["is_buy"] else 0
+                params["Date"] = order["datetime"]
+                params["PriceSignal"] = float(order["price_signal"])
+                params["PriceActual"] = float(order["price_actual"])
+                params["IsOpen"] = 1 if order["is_open"] else 0
+                params["StopLoss"] = float(
+                    order["stop_loss"]) if "stop_loss" in order else None
+                params["TakeProfit"] = float(
+                    order["take_profit"]) if "take_profit" in order else None
+                params["CloseDate"] = order.get("close_datetime")
+                params["ClosePrice"] = float(
+                    order["close_price"]) if "close_price" in order else None
+                params["ManualExit"] = 1 if "manual_exit" in order else 0
+                params["SlExit"] = 1 if "sl_exit" in order else 0
+                params["TpExit"] = 1 if "tp_exit" in order else 0
+                params["ErrorState"] = ";".join(
+                    order["error_state"]) if "error_state" in order else None
 
-                stop_loss = None
-                if "stop_loss" in order:
-                    stop_loss = str(order["stop_loss"])
-
-                take_profit = None
-                if "take_profit" in order:
-                    take_profit = str(order["take_profit"])
-
-                close_datetime = None
-                if "close_datetime" in order:
-                    close_datetime = order["close_datetime"]
-
-                last_sl_move = None
-                if "last_sl_move" in order:
-                    last_sl_move = order["last_sl_move"]
-
-                close_price = None
-                if "close_price" in order:
-                    close_price = str(order["close_price"])
-
-                close_datetime = None
-                if "close_datetime" in order:
-                    close_datetime = order["close_datetime"]
-
-                error_state = None
-                if "error_state" in order:
-                    error_state = ";".join(order["error_state"])
-
-                if order["is_buy"]:
-                    is_buy = 1
-
-                if order["is_open"]:
-                    is_open = 1
-
-                if "manual_exit" in order and order["manual_exit"]:
-                    manual_exit = 1
-
-                if "sl_exit" in order and order["sl_exit"]:
-                    sl_exit = 1
-
-                if "tp_exit" in order and order["tp_exit"]:
-                    tp_exit = 1
-
-                exec_string = f"INSERT INTO 'Order' VALUES ({channel_id},'{symbol}',{order_id},{is_buy},'{date}', '{price_signal}','{price_actual}',{is_open}, '{stop_loss}', '{take_profit}', '{close_datetime}', '{close_price}', '{last_sl_move}', {manual_exit}, {sl_exit}, {tp_exit}, '{error_state}')"
-                cur.execute(exec_string)
+                columns = ', '.join(params.keys())
+                placeholders = ':'+', :'.join(params.keys())
+                exec_string = "INSERT INTO 'Order' (%s) VALUES (%s)" % (
+                    columns, placeholders)
+                cur.execute(exec_string, params)
 
                 now_str = helper.get_now_utc_iso()
                 update_string = f"UPDATE Channel SET HistoryAnalyzed = 1, HistoryAnalysisUpdateDate = '{now_str}' WHERE Id={channel_id}"
                 cur.execute(update_string)
-
-        if wait_event.is_set():
-            return
+    if WAIT_EVENT_INNER.is_set():
+        return
+    typle_from_queue = queue_orders.get_nowait()
 
 
 def analyze_history(wait_event: threading.Event):
@@ -167,11 +180,12 @@ def analyze_history(wait_event: threading.Event):
 
     channels_total = len(channels_ids)
     channels_ready = 0
-    for channel_id in channels_ids:
-        local_channel_id = channel_id[0]
-        analyze_channel(wait_event, 1428566201)
-        channels_ready += 1
-        print(f"Channels analyzed {channels_ready} from {channels_total}")
+    analyze_channel(wait_event, 1428566201)
+    # for channel_id in channels_ids:
+    #     local_channel_id = channel_id[0]
+    #     analyze_channel(wait_event, 1428566201)
+    #     channels_ready += 1
+    #     print(f"Channels analyzed {channels_ready} from {channels_total}")
 
 
 async def bulk_exit(client):
