@@ -17,12 +17,13 @@ import helper
 import forwarder
 import db_poll
 import signal_parser
+import gc
 
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 lock = threading.Lock()
 queue_orders = Queue()
-executor = ThreadPoolExecutor(max_workers=10)
+executor = ThreadPoolExecutor(max_workers=50)
 WAIT_EVENT_INNER = threading.Event()
 
 
@@ -46,6 +47,7 @@ async def process_history(wait_event: threading.Event):
         wait_event.clear()
         wait_event.wait(STATS_COLLECT_SEC)
     WAIT_EVENT_INNER.set()
+    executor.shutdown(True)
     db_save_orders.join()
 
 
@@ -90,24 +92,23 @@ def analyze_channel(wait_event: threading.Event, channel_id):
 
         logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
                      channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
-        res_exec = executor.submit(process_channel_symbol, wait_event, ordered_messges,
-                                   symbol, min_date_rounded_minutes, max_date_rounded_minutes, channel_id)
-        logging.info('analyze_channel: result_exec_aync: %s', res_exec)
-
+        executor.submit(process_channel_symbol, ordered_messges,
+                        symbol, min_date_rounded_minutes, max_date_rounded_minutes, channel_id)
         if wait_event.is_set():
             return
 
 
 def process_channel_symbol(
-        wait_event,
         ordered_messges,
         symbol,
         min_date_rounded_minutes,
         max_date_rounded_minutes,
         channel_id):
     orders_list = signal_parser.analyze_channel_symbol(
-        wait_event, ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
+        WAIT_EVENT_INNER, ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
     queue_orders.put_nowait((orders_list, symbol, channel_id))
+    logging.info('analyze_channel: done, symbol: %s, channel_id: %s',
+                 symbol, channel_id)
 
 
 def orders_to_db():
@@ -116,13 +117,16 @@ def orders_to_db():
         try:
             typle_from_queue = queue_orders.get_nowait()
         except queue.Empty:
+            gc.collect()
             WAIT_EVENT_INNER.clear()
-            WAIT_EVENT_INNER.wait(STATS_COLLECT_LOOP_GAP_SEC)
+            WAIT_EVENT_INNER.wait(5)
             continue
 
         orders_list = typle_from_queue[0]
         symbol = typle_from_queue[1]
         channel_id = typle_from_queue[2]
+        logging.info('analyze_channel: writing, symbol: %s, channel_id: %s',
+                     symbol, channel_id)
 
         with classes.SQLite(config.DB_STATS_PATH, 'analyze_channel:', lock) as cur:
             exec_string = f"DELETE FROM 'Order' WHERE IdChannel = {channel_id}"
@@ -160,9 +164,6 @@ def orders_to_db():
                 now_str = helper.get_now_utc_iso()
                 update_string = f"UPDATE Channel SET HistoryAnalyzed = 1, HistoryAnalysisUpdateDate = '{now_str}' WHERE Id={channel_id}"
                 cur.execute(update_string)
-    if WAIT_EVENT_INNER.is_set():
-        return
-    typle_from_queue = queue_orders.get_nowait()
 
 
 def analyze_history(wait_event: threading.Event):
@@ -178,13 +179,11 @@ def analyze_history(wait_event: threading.Event):
     with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
         channels_ids = cur.execute(exec_string).fetchall()
 
-    channels_total = len(channels_ids)
     channels_ready = 0
     for channel_id in channels_ids:
         local_channel_id = channel_id[0]
         analyze_channel(wait_event, local_channel_id)
         channels_ready += 1
-        print(f"Channels analyzed {channels_ready} from {channels_total}")
 
 
 async def bulk_exit(client):
