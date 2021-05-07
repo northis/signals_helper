@@ -25,98 +25,7 @@ BUY_REGEX = r"buy"
 PRICE_VALID_PERCENT = 10
 
 
-def signal_to_orders(signal: classes.SignalProps, next_date: str, next_value: classes.Decimal, order_book: list):
-    if not signal.is_signal:
-        logging.debug("Cannot convert to order non-signal entity")
-        return
-
-    order = None
-    is_exit = signal.exit_ is not None
-    is_move_sl_to_entry = signal.move_sl_to_entry is not None
-    is_move_sl_to_profit = signal.move_sl_to_profit is not None
-    is_tp_hit = signal.tp_hit is not None
-    is_sl_hit = signal.sl_hit is not None
-    is_buy = signal.is_buy
-
-    is_initial_signal = not(
-        is_exit or is_move_sl_to_entry or is_move_sl_to_profit)
-
-    if is_initial_signal:
-        order = {}
-        order["id"] = signal.id_
-        order["is_buy"] = is_buy
-        order["datetime"] = next_date
-        order["price_signal"] = signal.price
-        order["price_actual"] = next_value
-        order["is_open"] = True
-
-        if signal.stop_loss is not None:
-            order["stop_loss"] = signal.stop_loss
-
-        if signal.take_profits is not None:
-            take_profits_len = len(signal.take_profits)
-            if take_profits_len == 1:
-                order["take_profit"] = signal.take_profits[0]
-            elif take_profits_len > 1:
-                for t_p in signal.take_profits:
-                    tp_order = copy.deepcopy(order)
-                    tp_order["take_profit"] = t_p
-                    validate_order(tp_order, signal, next_value)
-                    order_book.append(tp_order)
-
-        if take_profits_len <= 1:
-            validate_order(order, signal, next_value)
-            order_book.append(order)
-        return
-
-    related_orders = list(
-        filter(lambda x: x["id"] == signal.id_ and x["is_open"] is True, order_book))
-
-    if len(related_orders) == 0:
-        logging.debug("No related orders found")
-        return
-
-    for related_order in related_orders:
-        if is_tp_hit:
-            if is_buy and order["take_profit"] > next_value or (not is_buy) and order["take_profit"] < next_value:
-                order["close_price"] = next_value
-                order["close_datetime"] = next_date
-                order["is_open"] = False
-                order["tp_exit"] = True
-                is_move_sl_to_entry = True  # We set all the related orders to breakeven if one TP hit
-
-    related_orders = list(
-        filter(lambda x: x["is_open"] is True, related_orders))
-
-    for related_order in related_orders:
-        if is_move_sl_to_entry:
-            related_order["stop_loss"] = related_order["price_actual"]
-            related_order["close_datetime"] = next_date
-
-        if is_move_sl_to_profit:
-            if is_buy:
-                order["stop_loss"] = max(
-                    signal.move_sl_to_profit, key=lambda x: float(x.price))
-            else:
-                order["stop_loss"] = min(
-                    signal.move_sl_to_profit, key=lambda x: float(x.price))
-            related_order["last_sl_move"] = next_date
-
-        if is_exit or is_sl_hit:
-            order["close_price"] = next_value
-            order["close_datetime"] = next_date
-            order["is_open"] = False
-
-        if is_exit:
-            order["manual_exit"] = True
-
-        if is_sl_hit:
-            order["sl_exit"] = True
-
-        validate_order(related_order, signal, next_value)
-
-
-def validate_order(order: dict, signal: classes.SignalProps, next_value: classes.Decimal):
+def validate_order(order: dict, next_value: classes.Decimal):
     errors = list()
     take_profit = order.get("take_profit")
     stop_loss = order.get("stop_loss")
@@ -130,7 +39,7 @@ def validate_order(order: dict, signal: classes.SignalProps, next_value: classes
     if has_tp and (100*abs(float(take_profit) - next_value_fl)/next_value_fl > PRICE_VALID_PERCENT):
         errors.append("wrong_tp")
 
-    if signal.is_buy:
+    if order["is_buy"]:
         if has_sl and stop_loss > next_value:
             logging.debug("Wrong stoploss (buy)")
             errors.append("wrong_sl_buy")
@@ -189,8 +98,6 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
     filtered_messages = list(filter(lambda x:
                                     x["date"] >= min_date_str_iso and
                                     x["date"] <= max_date_str_iso, ordered_messges))
-    root_messages = dict()
-    last_signal: classes.SignalProps = None
 
     symbol_data_len = len(symbol_data)
     i = 0
@@ -232,61 +139,50 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
 
         for msg in found_messages:
             id_ = msg["id"]
+
+            if id_ == 2923:
+                print("2923")
+
             reply_to_message_id = msg.get("reply_to_msg_id")
             is_reply = reply_to_message_id is not None
-            root_message = None
+            target_orders = None
 
             if is_reply:
-                root_message = root_messages.get(reply_to_message_id)
+                reply_sources = list(
+                    filter(lambda x: x["is"] == id_, orders_open))
+                target_orders = reply_sources
             else:
-                root_message = last_signal
+                target_orders = orders_open
 
-            signal = string_to_signal(msg, symbol_regex, root_message)
-            if signal is None:
-                continue
+            string_to_orders(
+                msg, symbol_regex, target_orders, next_date_str, value_close, order_book)
 
-            if root_message is None and signal.is_signal:
-                root_message = signal
-
-            if root_message is not None:
-                root_messages[id_] = root_message
-
-            signal_to_orders(signal, next_date_str, value_close, order_book)
-
-            if signal.is_sl_tp_delayed:
-                last_signal = signal
-            elif last_signal is not None and not last_signal.is_sl_tp_delayed:
-                last_signal = None
-
-    out_list = list(
-        filter(lambda x: x.is_signal is True, root_messages.values()))
-    return (out_list, order_book)
+    return order_book
 
 
 def str_to_utc_iso_datetime(dt):
     return helper.str_to_utc_iso_datetime(dt, config.DT_INPUT_TIMEZONE, config.DT_INPUT_FORMAT)
 
 
-def string_to_signal(
-        msg: str, symbol_regex: str, reply_to: classes.SignalProps):
+def string_to_orders(
+        msg: str,
+        symbol_regex: str,
+        target_orders: list,
+        next_date: str,
+        next_value: classes.Decimal,
+        order_book: list):
 
     id_: int = msg["id"]
     text: str = message_to_text(msg)
     date: str = msg["date"]
 
-    if reply_to is None and text is None:
+    if target_orders is None and text is None:
         logging.debug(
             "Cannot get price from signal, ignore it. Message text is null and we don't have a reply")
         return None
 
     if text is None:
         text = ""
-
-    signal = classes.SignalProps()
-    signal.is_buy = re.search(BUY_REGEX, text) != None
-    signal.date = date
-    signal.id_ = id_
-    signal.text = text
 
     symbol_search = re.search(symbol_regex, text)
     signal_search = re.search(SIGNAL_REGEX, text)
@@ -295,24 +191,26 @@ def string_to_signal(
     breakeven_search = re.search(BREAKEVEN_REGEX, text)
     close_search = re.search(CLOSE_REGEX, text)
     tp_hit_search = re.search(TP_HIT_REGEX, text)
+    sl_hit_search = re.search(SL_HIT_REGEX, text)
 
-    is_reply = reply_to is not None
+    is_buy = re.search(BUY_REGEX, text) != None
+    has_target_orders = target_orders is not None and len(target_orders) > 0
     is_signal = signal_search is not None
     is_sl = sl_search is not None
     is_tp_hit = tp_hit_search is not None
-    is_tp = tp_search is not None
+    is_sl_hit = sl_hit_search is not None
+    is_tp = tp_search is not None and len(tp_search) > 0
     is_close = close_search is not None
-    is_breakeven = breakeven_search is not None
-    is_symbol = symbol_search is not None or (is_reply and reply_to.is_signal)
+    # If we hit TP (1), we move sl to breakeven too.
+    is_breakeven = breakeven_search is not None or is_tp_hit
+    is_symbol = symbol_search is not None or (
+        has_target_orders and is_signal)
 
-    signal.is_signal = is_signal
+    order = None
 
-    if is_reply:
-        reply_to.update_date = date
-
-    if not is_signal and not is_reply:
+    if not is_signal and not has_target_orders:
         logging.debug(
-            "Cannot get price from signal, ignore it. Message text isn't a signal and we don't have a reply")
+            "Cannot parse signal or replies")
         return None
 
     if not is_symbol:
@@ -320,77 +218,81 @@ def string_to_signal(
         return None
 
     if is_signal:
-        if not is_sl or not is_tp:
-            signal.is_sl_tp_delayed = True
-
         # We want to parse signals with price only.
         price_dec = helper.str_to_decimal(signal_search.group(4))
         if price_dec is None:
             logging.debug(
                 "Cannot get price from signal, ignore it. Message text: %s", text)
             return None
-        signal.price = price_dec
 
-    sl_dec: classes.Decimal = None
+        order = {}
+        order["id"] = id_
+        order["is_buy"] = is_buy
+        order["datetime"] = next_date
+        order["price_actual"] = next_value
+        order["price_signal"] = price_dec
+        order["is_open"] = True
 
-    need_reset_delayed_flag = False
-    if is_sl:
-        sl_dec = helper.str_to_decimal(sl_search.group(1))
-        if sl_dec is None:
-            logging.debug(
-                "Cannot get stoploss from signal, ignore it. Message text: %s", text)
-            return None
-        signal.stop_loss = sl_dec
-        if is_reply and reply_to.is_sl_tp_delayed:
-            need_reset_delayed_flag = True
+        if is_sl:
+            sl_dec = helper.str_to_decimal(sl_search.group(1))
+            if sl_dec is None:
+                logging.debug(
+                    "Cannot get stoploss from signal, ignore it. Message text: %s", text)
+                return None
+            order["stop_loss"] = sl_dec
 
-    elif not is_reply:
-        signal.is_sl_tp_delayed = True
+        if is_tp:
+            take_profit_index = 0
+            for tp_entry in tp_search:
+                tp_dec: classes.Decimal = helper.str_to_decimal(tp_entry)
+                if tp_dec is None:
+                    continue
+                if take_profit_index == 0:
+                    order["take_profit"] = tp_dec
+                    continue
 
-    if is_tp:
-        take_profits = list()
-        for tp in tp_search:
-            tp_dec: classes.Decimal = helper.str_to_decimal(tp)
-            if tp_dec is None:
-                continue
-            take_profits.append(tp_dec)
+                tp_order = copy.deepcopy(order)
+                tp_order["take_profit"] = tp_dec
+                validate_order(tp_order, next_value)
+                order_book.append(tp_order)
 
-        signal.take_profits = take_profits
-        if is_reply and reply_to.is_sl_tp_delayed:
-            need_reset_delayed_flag = True
+        validate_order(order, next_value)
+        order_book.append(order)
+        return
 
-    if need_reset_delayed_flag:
-        reply_to.is_sl_tp_delayed = False
+    for target_order in target_orders:
+        target_order["update_date"] = date
+        if is_sl:
+            sl_dec = helper.str_to_decimal(sl_search.group(1))
+            if sl_dec is None:
+                logging.debug(
+                    "Cannot get stoploss from signal, ignore it. Message text: %s", text)
+                return None
+            target_order["stop_loss"] = sl_dec
 
-    if is_reply:
-        reply_message = classes.MessageProps()
-        reply_message.id_ = id_
-        reply_message.reply_to_message_id = reply_to.id_
-        reply_message.text = text
-        reply_message.date = signal.date
+        if is_tp:
+            tp_single = tp_search[0]
+            tp_dec: classes.Decimal = helper.str_to_decimal(tp_single)
+            if tp_dec is not None:
+                target_order["take_profit"] = tp_dec
 
-        if is_breakeven:
-            reply_to.move_sl_to_entry = reply_message
+        if is_breakeven and target_order.get("has_breakeven") is None:
+            target_order["stop_loss"] = target_order["price_actual"]
+            target_order["breakeven_datetime"] = next_date
+            target_order["breakeven_price"] = target_order["price_actual"]
 
+        if is_close or is_sl_hit or is_tp_hit:
+            target_order["close_price"] = next_value
+            target_order["close_datetime"] = next_date
+            target_order["is_open"] = False
         if is_close:
-            reply_to.exit_ = reply_message
-
+            target_order["manual_exit"] = True
+        if is_sl_hit:
+            target_order["sl_exit"] = True
         if is_tp_hit:
-            if reply_to.tp_hit is None:
-                reply_to.tp_hit = list()
-                reply_to.move_sl_to_entry = reply_message
-                # If we hit TP (1), we move sl to breakeven too.
+            target_order["tp_exit"] = True
 
-            reply_to.tp_hit.append(reply_message)
-
-        if is_sl and reply_to.stop_loss is not None:
-            if reply_to.move_sl_to_profit is None:
-                reply_to.move_sl_to_profit = list()
-
-            reply_message.price = sl_dec
-            reply_to.move_sl_to_profit.append(reply_message)
-
-    return signal
+        validate_order(target_order, next_value)
 
 
 def message_to_text(message):

@@ -80,12 +80,8 @@ def analyze_channel(wait_event: threading.Event, channel_id):
         logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
                      channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
 
-        (signals_list, orders_list) = signal_parser.analyze_channel_symbol(
+        orders_list = signal_parser.analyze_channel_symbol(
             ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
-
-        save_path_signals = os.path.join(
-            config.CHANNELS_ANALYSIS_DIR, f"{channel_id}.{symbol}.signals.json")
-        save_signals_json(save_path_signals, signals_list)
 
         with classes.SQLite(config.DB_STATS_PATH, 'analyze_channel:', lock) as cur:
             exec_string = f"DELETE FROM 'Order' WHERE IdChannel = {channel_id}"
@@ -102,31 +98,31 @@ def analyze_channel(wait_event: threading.Event, channel_id):
                 sl_exit = 0
                 tp_exit = 0
 
-                stop_loss = "NULL"
+                stop_loss = None
                 if "stop_loss" in order:
                     stop_loss = str(order["stop_loss"])
 
-                take_profit = "NULL"
+                take_profit = None
                 if "take_profit" in order:
                     take_profit = str(order["take_profit"])
 
-                close_datetime = "NULL"
+                close_datetime = None
                 if "close_datetime" in order:
                     close_datetime = order["close_datetime"]
 
-                last_sl_move = "NULL"
+                last_sl_move = None
                 if "last_sl_move" in order:
                     last_sl_move = order["last_sl_move"]
 
-                close_price = "NULL"
+                close_price = None
                 if "close_price" in order:
                     close_price = str(order["close_price"])
 
-                close_datetime = "NULL"
+                close_datetime = None
                 if "close_datetime" in order:
                     close_datetime = order["close_datetime"]
 
-                error_state = "NULL"
+                error_state = None
                 if "error_state" in order:
                     error_state = ";".join(order["error_state"])
 
@@ -156,14 +152,6 @@ def analyze_channel(wait_event: threading.Event, channel_id):
             return
 
 
-def save_signals_json(file, json_object):
-    enc = classes.SignalPropsEncoder()
-    with open(file, 'w', encoding="utf-8") as f:
-        json.dump(obj=json_object, fp=f, indent=2,
-                  sort_keys=False, ensure_ascii=False,
-                  default=lambda a: enc.default(a))
-
-
 def analyze_history(wait_event: threading.Event):
     # gold like one of
     min_date = db_poll.db_time_ranges[classes.Symbol.XAUUSD][0]
@@ -181,7 +169,7 @@ def analyze_history(wait_event: threading.Event):
     channels_ready = 0
     for channel_id in channels_ids:
         local_channel_id = channel_id[0]
-        analyze_channel(wait_event, local_channel_id)
+        analyze_channel(wait_event, 1428566201)
         channels_ready += 1
         print(f"Channels analyzed {channels_ready} from {channels_total}")
 
