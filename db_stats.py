@@ -180,12 +180,11 @@ def analyze_history(wait_event: threading.Event):
 
     channels_total = len(channels_ids)
     channels_ready = 0
-    analyze_channel(wait_event, 1428566201)
-    # for channel_id in channels_ids:
-    #     local_channel_id = channel_id[0]
-    #     analyze_channel(wait_event, 1428566201)
-    #     channels_ready += 1
-    #     print(f"Channels analyzed {channels_ready} from {channels_total}")
+    for channel_id in channels_ids:
+        local_channel_id = channel_id[0]
+        analyze_channel(wait_event, local_channel_id)
+        channels_ready += 1
+        print(f"Channels analyzed {channels_ready} from {channels_total}")
 
 
 async def bulk_exit(client):
