@@ -59,26 +59,39 @@ def validate_order(order: dict, next_value: classes.Decimal):
     if len(errors) > 0:
         order["error_state"] = errors
         order["is_open"] = False
+        return False
+    return True
 
 
-def update_orders(next_date: str, next_value: classes.Decimal, open_orders: list):
+def update_orders(next_date: str, high: classes.Decimal, low: classes.Decimal, close: classes.Decimal, open_orders: list):
+
+    is_closed = False
     for order in open_orders:
         stop_loss = order.get("stop_loss")
         take_profit = order.get("take_profit")
 
         buy_close_cond = order["is_buy"] and (
-            stop_loss is not None and next_value <= stop_loss or take_profit is not None and next_value >= take_profit)
+            stop_loss is not None and low <= stop_loss or take_profit is not None and high >= take_profit)
         sell_close_cond = (not order["is_buy"]) and (
-            stop_loss is not None and next_value >= stop_loss or take_profit is not None and next_value <= take_profit)
+            stop_loss is not None and high >= stop_loss or take_profit is not None and low <= take_profit)
 
         if buy_close_cond or sell_close_cond:
             order["auto_hit"] = True
-            order["close_price"] = next_value
+            order["close_price"] = close
             order["close_datetime"] = next_date
             order["is_open"] = False
+            is_closed = True
+
+    if not is_closed:
+        return
+
+    filtered = list(filter(lambda x: order["is_open"] and order.get(
+        "has_breakeven") is None, open_orders))
+    for order in filtered:
+        order["stop_loss"] = order["price_actual"]
 
 
-def analyze_channel_symbol(wait_event: threading.Event, ordered_messges, symbol, min_date, max_date):
+def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
     symbol_regex = symbols_regex_map[symbol]
 
     order_book = list()
@@ -105,14 +118,12 @@ def analyze_channel_symbol(wait_event: threading.Event, ordered_messges, symbol,
     current_date_str = None
     next_date_str = None
 
+    logging.info('analyze_channel_symbol: setting orders... %s', symbol)
     for symbol_value in symbol_data:
         if i < symbol_data_len-1:
             next_value = symbol_data[i + 1]
         else:
             break
-
-        if wait_event.is_set():
-            return
 
         i += 1
 
@@ -134,16 +145,16 @@ def analyze_channel_symbol(wait_event: threading.Event, ordered_messges, symbol,
         if not has_messages_in_min and not has_orders_open:
             continue
 
-        # We decide that this and appropriate time to catch up a signal -
-        # close of current minute and time of text minute starts (next_date_str)
+        value_high = symbol_value[1]
+        value_low = symbol_value[2]
         value_close = symbol_value[3]
 
         if has_orders_open:
-            update_orders(next_date_str, value_close, orders_open)
+            update_orders(next_date_str, value_high,
+                          value_low, value_close, orders_open)
 
         for msg in found_messages:
             id_ = msg["id"]
-
             reply_to_message_id = msg.get("reply_to_msg_id")
             is_reply = reply_to_message_id is not None
             target_orders = None
@@ -205,7 +216,7 @@ def string_to_orders(
     is_breakeven = breakeven_search is not None or is_tp_hit
     is_close = close_search is not None and breakeven_search is None
     is_symbol = symbol_search is not None or (
-        has_target_orders and is_signal)
+        has_target_orders)
 
     order = None
 
@@ -248,16 +259,18 @@ def string_to_orders(
                 tp_dec: classes.Decimal = helper.str_to_decimal(tp_entry)
                 if tp_dec is None:
                     continue
-                if take_profit_index == 0:
+                take_profit_index += 1
+                if take_profit_index == 1:
                     order["take_profit"] = tp_dec
                     continue
 
                 tp_order = copy.deepcopy(order)
                 tp_order["take_profit"] = tp_dec
-                validate_order(tp_order, next_value)
-                order_book.append(tp_order)
+                if validate_order(tp_order, next_value):
+                    order_book.append(tp_order)
 
-        validate_order(order, next_value)
+        if not validate_order(order, next_value):
+            return
 
         if order["is_open"]:
             breakeven_order = copy.deepcopy(order)
@@ -265,7 +278,9 @@ def string_to_orders(
             order_book.append(breakeven_order)
 
         order_book.append(order)
-        return
+
+        # if len(target_orders) > 0:
+        #     is_close = True  # We want to close if another signal comes
 
     for target_order in target_orders:
         target_order["update_date"] = date
@@ -277,7 +292,7 @@ def string_to_orders(
                 return None
             target_order["stop_loss"] = sl_dec
 
-        if is_tp:
+        if is_tp and not is_tp_hit:
             tp_single = tp_search[0]
             tp_dec: classes.Decimal = helper.str_to_decimal(tp_single)
             if tp_dec is not None:
@@ -291,12 +306,13 @@ def string_to_orders(
             else:
                 is_close_local = True
 
-        if is_close_local or is_sl_hit or is_tp_hit:
+        if is_close_local:
             target_order["close_price"] = next_value
             target_order["close_datetime"] = next_date
             target_order["is_open"] = False
-        if is_close_local:
             target_order["manual_exit"] = True
+
+        # Just for information, this is not a real sl\tp hit
         if is_sl_hit:
             target_order["sl_exit"] = True
         if is_tp_hit:

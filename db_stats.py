@@ -6,9 +6,6 @@ import json
 import traceback
 import os
 import datetime
-from concurrent.futures import ThreadPoolExecutor
-from multiprocessing import Queue
-import queue
 from telethon import TelegramClient, errors, functions
 import classes
 import config
@@ -17,41 +14,65 @@ import helper
 import forwarder
 import db_poll
 import signal_parser
-import gc
+from multiprocessing import Pool
 
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
+STATS_ANALYZE_LOOP_GAP_SEC = 10
 lock = threading.Lock()
-queue_orders = Queue()
-executor = ThreadPoolExecutor(max_workers=50)
+lock_increment = threading.Lock()
+MAX_WORKERS = 1
+BUSY_THREADS = 0
+pool: Pool
 WAIT_EVENT_INNER = threading.Event()
+WAIT_EVENT_OUTER: threading.Event = None
 
 
-async def process_history(wait_event: threading.Event):
-    db_save_orders = threading.Thread(target=orders_to_db, daemon=True)
-    db_save_orders.start()
+def atomic_increment():
+    lock_increment.acquire()
+    global BUSY_THREADS
+    BUSY_THREADS += 1
+    lock_increment.release()
 
-    while not wait_event.is_set():
+
+def atomic_decrement():
+    lock_increment.acquire()
+    global BUSY_THREADS
+    BUSY_THREADS -= 1
+    lock_increment.release()
+
+
+def is_theads_busy():
+    lock_increment.acquire()
+    res = BUSY_THREADS >= MAX_WORKERS
+    lock_increment.release()
+    return res
+
+
+async def process_history():
+    global pool
+    pool = Pool(MAX_WORKERS)
+    while not WAIT_EVENT_OUTER.is_set():
         try:
             await asyncio.sleep(5)  # wait for data
-            analyze_history(wait_event)
-
+            analyze_history()
         except Exception as ex:
             logging.error('analyze_history: %s, error: %s',
                           ex, traceback.format_exc())
+        if WAIT_EVENT_OUTER.is_set():
+            break
         try:
-            await download_history(wait_event)
+            await download_history()
         except Exception as ex:
             logging.error('download_history: %s, error: %s',
                           ex, traceback.format_exc())
-        wait_event.clear()
-        wait_event.wait(STATS_COLLECT_SEC)
+        WAIT_EVENT_OUTER.clear()
+        WAIT_EVENT_OUTER.wait(STATS_COLLECT_SEC)
+    pool.close()
     WAIT_EVENT_INNER.set()
-    executor.shutdown(True)
-    db_save_orders.join()
 
 
-def analyze_channel(wait_event: threading.Event, channel_id):
+def analyze_channel(channel_id):
     out_path = os.path.join(config.CHANNELS_HISTORY_DIR, f"{channel_id}.json")
     messages = None
     try:
@@ -90,11 +111,19 @@ def analyze_channel(wait_event: threading.Event, channel_id):
         max_date_rounded_minutes = max_date - datetime.timedelta(seconds=max_date.second,
                                                                  microseconds=max_date.microsecond)
 
-        logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
-                     channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
-        executor.submit(process_channel_symbol, ordered_messges,
-                        symbol, min_date_rounded_minutes, max_date_rounded_minutes, channel_id)
-        if wait_event.is_set():
+        while not WAIT_EVENT_OUTER.is_set():
+
+            if is_theads_busy():
+                WAIT_EVENT_INNER.wait(STATS_ANALYZE_LOOP_GAP_SEC)
+            else:
+                logging.info('analyze_channel: id: %s, symbol: %s, start: %s, end: %s',
+                             channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
+                process_channel_typle = (ordered_messges,
+                                         symbol, min_date_rounded_minutes, max_date_rounded_minutes, channel_id)
+                pool.apply_async(process_channel_symbol, process_channel_typle)
+                break
+
+        if WAIT_EVENT_OUTER.is_set():
             return
 
 
@@ -104,31 +133,19 @@ def process_channel_symbol(
         min_date_rounded_minutes,
         max_date_rounded_minutes,
         channel_id):
-    orders_list = signal_parser.analyze_channel_symbol(
-        WAIT_EVENT_INNER, ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
-    queue_orders.put_nowait((orders_list, symbol, channel_id))
-    logging.info('analyze_channel: done, symbol: %s, channel_id: %s',
-                 symbol, channel_id)
+    try:
+        atomic_increment()
 
+        orders_list = signal_parser.analyze_channel_symbol(
+            ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
 
-def orders_to_db():
-    while (not WAIT_EVENT_INNER.is_set()):
-        typle_from_queue = None
-        try:
-            typle_from_queue = queue_orders.get_nowait()
-        except queue.Empty:
-            gc.collect()
-            WAIT_EVENT_INNER.clear()
-            WAIT_EVENT_INNER.wait(5)
-            continue
+        if orders_list is None:
+            return
 
-        orders_list = typle_from_queue[0]
-        symbol = typle_from_queue[1]
-        channel_id = typle_from_queue[2]
-        logging.info('analyze_channel: writing, symbol: %s, channel_id: %s',
-                     symbol, channel_id)
+        logging.info('analyze_channel: writing, symbol: %s, channel_id: %s, BUSY_THREADS: %s',
+                     symbol, channel_id, BUSY_THREADS)
 
-        with classes.SQLite(config.DB_STATS_PATH, 'analyze_channel:', lock) as cur:
+        with classes.SQLite(config.DB_STATS_PATH, 'process_channel_symbol:', lock) as cur:
             exec_string = f"DELETE FROM 'Order' WHERE IdChannel = {channel_id}"
             cur.execute(exec_string)
 
@@ -161,12 +178,17 @@ def orders_to_db():
                     columns, placeholders)
                 cur.execute(exec_string, params)
 
-                now_str = helper.get_now_utc_iso()
-                update_string = f"UPDATE Channel SET HistoryAnalyzed = 1, HistoryAnalysisUpdateDate = '{now_str}' WHERE Id={channel_id}"
-                cur.execute(update_string)
+            now_str = helper.get_now_utc_iso()
+            update_string = f"UPDATE Channel SET HistoryAnalyzed = 1, HistoryAnalysisUpdateDate = '{now_str}' WHERE Id={channel_id}"
+            cur.execute(update_string)
+        logging.info('analyze_channel: writing done, symbol: %s, channel_id: %s, BUSY_THREADS: %s',
+                     symbol, channel_id, BUSY_THREADS)
+
+    finally:
+        atomic_decrement()
 
 
-def analyze_history(wait_event: threading.Event):
+def analyze_history():
     # gold like one of
     min_date = db_poll.db_time_ranges[classes.Symbol.XAUUSD][0]
 
@@ -174,7 +196,7 @@ def analyze_history(wait_event: threading.Event):
         logging.info('analyze_channel: symbol data is not loaded yet')
         return
 
-    exec_string = "SELECT Id FROM Channel WHERE HistoryLoaded = 1 AND (HistoryAnalyzed <> 1 OR HistoryAnalyzed IS NULL) "
+    exec_string = "SELECT Id FROM Channel WHERE HistoryLoaded = 1 AND (HistoryAnalyzed <> 1 OR HistoryAnalyzed IS NULL)"
     channels_ids = None
     with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
         channels_ids = cur.execute(exec_string).fetchall()
@@ -182,8 +204,10 @@ def analyze_history(wait_event: threading.Event):
     channels_ready = 0
     for channel_id in channels_ids:
         local_channel_id = channel_id[0]
-        analyze_channel(wait_event, local_channel_id)
+        analyze_channel(local_channel_id)
         channels_ready += 1
+        if WAIT_EVENT_OUTER.is_set():
+            return
 
 
 async def bulk_exit(client):
@@ -196,7 +220,7 @@ async def bulk_exit(client):
             await forwarder.exit_if_needed(channel_link, channel_id, client)
 
 
-async def download_history(wait_event: threading.Event):
+async def download_history():
     exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded IS NULL OR HistoryLoaded <> 1"
     channels = None
 
@@ -249,15 +273,15 @@ async def download_history(wait_event: threading.Event):
             if channel_link is not None:
                 await forwarder.exit_if_needed(channel_link, channel_id, client)
 
-        if wait_event.is_set():
+        if WAIT_EVENT_OUTER.is_set():
             return
 
-        wait_event.clear()
-        wait_event.wait(STATS_COLLECT_LOOP_GAP_SEC)
+        WAIT_EVENT_OUTER.clear()
+        WAIT_EVENT_OUTER.wait(STATS_COLLECT_LOOP_GAP_SEC)
 
 
-def main_exec(wait_event: threading.Event):
-    asyncio.run(process_history(wait_event))
+def main_exec():
+    asyncio.run(process_history())
 
 
 def get_primary_message_id(id_message, id_channel):

@@ -36,8 +36,9 @@ if __name__ == "__main__":
     db_poll_forwarder = threading.Thread(target=forwarder_sync, daemon=True)
     # db_poll_forwarder.start()
 
+    db_stats.WAIT_EVENT_OUTER = poll_event_sync
     history_downloader = threading.Thread(
-        target=db_stats.main_exec, args=[poll_event_sync], daemon=True)
+        target=db_stats.main_exec, daemon=True)
     history_downloader.start()
 
     print("Press any key to exit")
