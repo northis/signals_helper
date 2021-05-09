@@ -21,7 +21,7 @@ STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 STATS_ANALYZE_LOOP_GAP_SEC = 10
 lock = threading.Lock()
 lock_increment = threading.Lock()
-MAX_WORKERS = 1
+MAX_WORKERS = 20
 BUSY_THREADS = 0
 pool: Pool
 WAIT_EVENT_INNER = threading.Event()
@@ -120,25 +120,18 @@ def analyze_channel(channel_id):
                              channel_id, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
                 process_channel_typle = (ordered_messges,
                                          symbol, min_date_rounded_minutes, max_date_rounded_minutes, channel_id)
-                pool.apply_async(process_channel_symbol, process_channel_typle)
+                atomic_increment()
+                pool.apply_async(
+                    signal_parser.analyze_channel_symbol, process_channel_typle, callback=write_db)
                 break
 
         if WAIT_EVENT_OUTER.is_set():
             return
 
 
-def process_channel_symbol(
-        ordered_messges,
-        symbol,
-        min_date_rounded_minutes,
-        max_date_rounded_minutes,
-        channel_id):
+def write_db(input_typle):
+    (orders_list, symbol, channel_id) = input_typle
     try:
-        atomic_increment()
-
-        orders_list = signal_parser.analyze_channel_symbol(
-            ordered_messges, symbol, min_date_rounded_minutes, max_date_rounded_minutes)
-
         if orders_list is None:
             return
 

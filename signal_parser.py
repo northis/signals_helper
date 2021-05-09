@@ -1,9 +1,8 @@
 import re
 import logging
+import copy
 import classes
 import config
-import copy
-import threading
 
 import helper
 
@@ -24,6 +23,7 @@ TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"buy"
 PRICE_VALID_PERCENT = 10
+USE_FAST_BOOK = True
 
 
 def validate_order(order: dict, next_value: classes.Decimal):
@@ -85,13 +85,13 @@ def update_orders(next_date: str, high: classes.Decimal, low: classes.Decimal, c
     if not is_closed:
         return
 
-    filtered = list(filter(lambda x: order["is_open"] and order.get(
-        "has_breakeven") is None, open_orders))
+    filtered = list(filter(lambda x: x["is_open"] and x.get(
+        "has_breakeven") == None, open_orders))
     for order in filtered:
         order["stop_loss"] = order["price_actual"]
 
 
-def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
+def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date, channel_id):
     symbol_regex = symbols_regex_map[symbol]
 
     order_book = list()
@@ -169,7 +169,7 @@ def analyze_channel_symbol(ordered_messges, symbol, min_date, max_date):
             string_to_orders(
                 msg, symbol_regex, target_orders, next_date_str, value_close, order_book)
 
-    return order_book
+    return (order_book, symbol, channel_id)
 
 
 def str_to_utc_iso_datetime(dt):
@@ -254,15 +254,26 @@ def string_to_orders(
             order["stop_loss"] = sl_dec
 
         if is_tp:
-            take_profit_index = 0
+            tp_list = list()
             for tp_entry in tp_search:
                 tp_dec: classes.Decimal = helper.str_to_decimal(tp_entry)
                 if tp_dec is None:
                     continue
+                tp_list.append(tp_dec)
+
+            tp_list = sorted(tp_list)
+            if not is_buy:
+                tp_list = reversed(tp_list)
+
+            take_profit_index = 0
+            for tp_dec in tp_list:
                 take_profit_index += 1
                 if take_profit_index == 1:
                     order["take_profit"] = tp_dec
-                    continue
+                    if USE_FAST_BOOK:
+                        break
+                    else:
+                        continue
 
                 tp_order = copy.deepcopy(order)
                 tp_order["take_profit"] = tp_dec
@@ -272,15 +283,15 @@ def string_to_orders(
         if not validate_order(order, next_value):
             return
 
-        if order["is_open"]:
+        if order["is_open"] and not USE_FAST_BOOK:
             breakeven_order = copy.deepcopy(order)
             breakeven_order["for_breakeven"] = True
             order_book.append(breakeven_order)
 
         order_book.append(order)
 
-        # if len(target_orders) > 0:
-        #     is_close = True  # We want to close if another signal comes
+        if len(target_orders) > 0 and USE_FAST_BOOK:
+            is_close = True  # We want to close if another signal comes
 
     for target_order in target_orders:
         target_order["update_date"] = date
@@ -301,7 +312,7 @@ def string_to_orders(
         is_close_local = is_close
         if is_breakeven and target_order.get("has_breakeven") is None:
             target_order["has_breakeven"] = True
-            if target_order.get("for_breakeven") is None:
+            if target_order.get("for_breakeven") is None and not USE_FAST_BOOK:
                 target_order["stop_loss"] = target_order["price_actual"]
             else:
                 is_close_local = True
