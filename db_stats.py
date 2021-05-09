@@ -23,8 +23,8 @@ lock = threading.Lock()
 lock_increment = threading.Lock()
 
 # if you have lots to analyze, but this can burn you cpu
-MAX_WORKERS = multiprocessing.cpu_count()
-# MAX_WORKERS = 1 # For common usage
+# MAX_WORKERS = multiprocessing.cpu_count()
+MAX_WORKERS = 1  # For common usage
 
 BUSY_THREADS = 0
 pool: Pool
