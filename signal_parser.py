@@ -23,7 +23,7 @@ TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"buy"
 PRICE_VALID_PERCENT = 10
-USE_FAST_BOOK = True
+USE_FAST_BOOK = False
 
 
 def validate_order(order: dict, next_value: classes.Decimal):

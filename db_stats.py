@@ -2,10 +2,12 @@ import asyncio
 import sqlite3
 import threading
 import logging
-import json
 import traceback
 import os
 import datetime
+from multiprocessing import Pool
+import multiprocessing
+
 from telethon import TelegramClient, errors, functions
 import classes
 import config
@@ -14,14 +16,16 @@ import helper
 import forwarder
 import db_poll
 import signal_parser
-from multiprocessing import Pool
-
 STATS_COLLECT_SEC = 2*60*60  # 2 hours
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 STATS_ANALYZE_LOOP_GAP_SEC = 10
 lock = threading.Lock()
 lock_increment = threading.Lock()
-MAX_WORKERS = 20
+
+# if you have lots to analyze, but this can burn you cpu
+MAX_WORKERS = multiprocessing.cpu_count()
+# MAX_WORKERS = 1 # For common usage
+
 BUSY_THREADS = 0
 pool: Pool
 WAIT_EVENT_INNER = threading.Event()
@@ -68,8 +72,10 @@ async def process_history():
                           ex, traceback.format_exc())
         WAIT_EVENT_OUTER.clear()
         WAIT_EVENT_OUTER.wait(STATS_COLLECT_SEC)
-    pool.close()
+    print("Closing processes...")
     WAIT_EVENT_INNER.set()
+    pool.close()
+    pool.join()
 
 
 def analyze_channel(channel_id):

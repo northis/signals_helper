@@ -6,8 +6,7 @@ import config
 
 
 def get_now_utc_iso():
-    now_str = datetime_to_utc_datetime(
-        datetime.datetime.utcnow()).isoformat()
+    now_str = datetime.datetime.utcnow().isoformat()
     return now_str
 
 
