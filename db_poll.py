@@ -97,7 +97,6 @@ def update_db_time_range(symbol):
         db_time_ranges[symbol] = (date_start, date_end)
 
         dates = f"symbol:{symbol}, date_start: {date_start}, date_end: {date_end}"
-        print(dates)
         logging.info(dates)
 
 
