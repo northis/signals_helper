@@ -1,22 +1,31 @@
 #!/usr/bin/python3.9
-
+import argparse
 import threading
 import asyncio
 import logging
+import signal
+from multiprocessing import Event
 import classes
 import forwarder
 import db_stats
 import db_poll
 
-
 poll_event_sync = threading.Event()
 stop_flag = classes.StopFlag()
+stop_event = Event()
 
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     filename='main.log',
                     encoding='utf-8',
                     level=logging.INFO)
+
+
+def signal_handler():
+    stop_event.set()
+
+
+signal.signal(signal.SIGINT, signal_handler)
 
 
 async def forwarder_event():
@@ -28,6 +37,9 @@ def forwarder_sync():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-service', action='store_true')
+    is_service = parser.parse_args().service
 
     db_poll_thread = threading.Thread(target=db_poll.main_exec,
                                       args=[poll_event_sync], daemon=True)
@@ -41,8 +53,12 @@ if __name__ == "__main__":
         target=db_stats.main_exec, daemon=True)
     history_downloader.start()
 
-    print("Press any key to exit")
-    input()
+    if is_service:
+        stop_event.wait()
+    else:
+        print("Press any key to exit")
+        input()
+
     poll_event_sync.set()
     stop_flag.Value = True
 
