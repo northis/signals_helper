@@ -302,6 +302,12 @@ def get_primary_message_id(id_message, id_channel):
         sql_connection.close()
 
 
+def delete_primary_message_id(id_primary):
+    with classes.SQLite(config.DB_STATS_PATH, 'update_primary_message_id, db:', lock) as cur:
+        del_string = f"DELETE FROM ChannelMessageLink WHERE IdPrimary = {id_primary}"
+        cur.execute(del_string)
+
+
 def set_primary_message_id(id_primary, id_message, id_channel):
     sql_connection = sqlite3.connect(config.DB_STATS_PATH)
     cur = sql_connection.cursor()

@@ -1,15 +1,15 @@
-import os
 import logging
 import asyncio
 import re
+import traceback
 from dotenv import load_dotenv
 from telethon import TelegramClient, sync, events, tl, errors
-from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest
+from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest, EditMessageRequest
 from telethon.tl.functions.channels import GetMessagesRequest, JoinChannelRequest, LeaveChannelRequest
 import config
 import classes
 import db_stats
-import traceback
+import signal_parser
 
 SIGNAL_REGEX = r"(buy)|(sell)"
 LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
@@ -253,6 +253,11 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
         logging.info('Forwarding to primary (id = %s)', message.id)
         return
 
+    if primary_reply_outer is None:
+        logging.error(
+            'Cannot reply to primary (id = %s), primary_reply_outer is None', message.id)
+        return
+
     message_sent = await client.send_message(
         to_primary_id, message, reply_to=primary_reply_outer)
     db_stats.set_primary_message_id(
@@ -270,6 +275,31 @@ async def exit_if_needed(url, channel_id, client):
         logging.info('Exit from channel %s', channel_id)
         exit_res = await client(LeaveChannelRequest(channel_id))
         logging.info('Exited %s', exit_res)
+
+
+async def main_edit_message(to_primary_id, client, event):
+    message = event.message
+    id_message = message.id
+    id_channel = message.chat.id
+
+    saved_message_id = db_stats.get_primary_message_id(
+        id_message, id_channel)
+
+    if saved_message_id is None or saved_message_id == 0:
+        logging.info('Cannot find message with id %s to edit (channel id is %s)',
+                     id_message, id_channel)
+
+    msg = await client.get_messages(to_primary_id, ids=saved_message_id)
+    if msg is None:
+        logging.info('Cannot find message with id %s to edit, msg is None (channel id is %s)',
+                     id_message, id_channel)
+
+    message_sent = await client.send_message(
+        to_primary_id, message, reply_to=msg, silent=True)
+
+    db_stats.delete_primary_message_id(saved_message_id)
+    db_stats.set_primary_message_id(
+        message_sent.id, id_message, id_channel)
 
 
 async def main_forward_message(to_primary_id, to_secondary_id, client, event):
@@ -294,17 +324,19 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
         join_urls.append(res_group)
         contains_no_links = False
 
+    is_reply_signal = False
     if reply is not None:
         reply_text = str(reply.to_dict()['message'])
+        is_reply_signal = re.search(
+            signal_parser.SIGNAL_REGEX, reply_text) is not None
         message_link = re.finditer(LINKS_REGEX, reply_text, re.IGNORECASE)
         for message_link_match in message_link:
             contains_no_links = False
             break
 
-    is_signal = re.search(SIGNAL_REGEX, message_text) is not None
-    has_sticker = message.sticker is not None
+    is_signal = re.search(signal_parser.SIGNAL_REGEX, message_text) is not None
     is_primary = (is_primary or is_tradingview) and contains_no_links and (
-        message.is_reply or is_signal or has_sticker)
+        (message.is_reply and is_reply_signal) or is_signal)
 
     logging.info(
         'Message %s (contains_no_links=%s, is_signal=%s)',
@@ -352,6 +384,10 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
     @client.on(events.NewMessage(chats=(from_chat_id)))
     async def handler(event):
         await main_forward_message(to_primary_id, to_secondary_id, client, event)
+
+    @client.on(events.MessageEdited)
+    async def handler_edit(event):
+        await main_edit_message(to_primary_id, client, event)
 
 
 def get_invite_string_from_url(url):
