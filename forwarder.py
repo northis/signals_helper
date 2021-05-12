@@ -248,8 +248,15 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
 
     else:
         message_forwarded = await client.forward_messages(to_primary_id, message)
+
+        chat_id = None
+        if message.chat is None:
+            chat_id = message.chat_id
+        else:
+            chat_id = message.chat.id
+
         db_stats.set_primary_message_id(
-            message_forwarded.id, message.id, message.chat.id)
+            message_forwarded.id, message.id, chat_id)
         logging.info('Forwarding to primary (id = %s)', message.id)
         return
 
@@ -296,12 +303,12 @@ async def main_edit_message(to_primary_id, client, event):
                      id_message, id_channel)
         return
 
-    message_sent = await client.send_message(
-        to_primary_id, message, reply_to=msg, silent=True)
+    # message_sent = await client.send_message(
+    #     to_primary_id, message, reply_to=msg, silent=True)
 
-    db_stats.delete_primary_message_id(id_message, id_channel)
-    db_stats.set_primary_message_id(
-        message_sent.id, id_message, id_channel)
+    # db_stats.delete_primary_message_id(id_message, id_channel)
+    # db_stats.set_primary_message_id(
+    #     message_sent.id, id_message, id_channel)
 
 
 async def main_forward_message(to_primary_id, to_secondary_id, client, event):
@@ -387,9 +394,9 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
     async def handler(event):
         await main_forward_message(to_primary_id, to_secondary_id, client, event)
 
-    @client.on(events.MessageEdited)
-    async def handler_edit(event):
-        await main_edit_message(to_primary_id, client, event)
+    # @client.on(events.MessageEdited)
+    # async def handler_edit(event):
+    #     await main_edit_message(to_primary_id, client, event)
 
 
 def get_invite_string_from_url(url):
