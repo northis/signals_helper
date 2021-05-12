@@ -297,7 +297,7 @@ async def main_edit_message(to_primary_id, client, event):
     message_sent = await client.send_message(
         to_primary_id, message, reply_to=msg, silent=True)
 
-    db_stats.delete_primary_message_id(saved_message_id)
+    db_stats.delete_primary_message_id(id_message, id_channel)
     db_stats.set_primary_message_id(
         message_sent.id, id_message, id_channel)
 
