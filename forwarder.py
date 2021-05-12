@@ -288,11 +288,13 @@ async def main_edit_message(to_primary_id, client, event):
     if saved_message_id is None or saved_message_id == 0:
         logging.info('Cannot find message with id %s to edit (channel id is %s)',
                      id_message, id_channel)
+        return
 
     msg = await client.get_messages(to_primary_id, ids=saved_message_id)
     if msg is None:
         logging.info('Cannot find message with id %s to edit, msg is None (channel id is %s)',
                      id_message, id_channel)
+        return
 
     message_sent = await client.send_message(
         to_primary_id, message, reply_to=msg, silent=True)
