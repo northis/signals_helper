@@ -16,7 +16,7 @@ import helper
 import forwarder
 import db_poll
 import signal_parser
-STATS_COLLECT_SEC = 2*60*60  # 2 hours
+STATS_COLLECT_SEC = 1*60*60  # 1 hour
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 STATS_ANALYZE_LOOP_GAP_SEC = 10
 lock = threading.Lock()
@@ -56,19 +56,19 @@ def is_theads_busy():
 async def process_history():
     global pool
     pool = Pool(MAX_WORKERS)
+    await asyncio.sleep(5)  # wait for data
     while not WAIT_EVENT_OUTER.is_set():
-        try:
-            await asyncio.sleep(5)  # wait for data
-            analyze_history()
-        except Exception as ex:
-            logging.error('analyze_history: %s, error: %s',
-                          ex, traceback.format_exc())
         if WAIT_EVENT_OUTER.is_set():
             break
         try:
             await download_history()
         except Exception as ex:
             logging.error('download_history: %s, error: %s',
+                          ex, traceback.format_exc())
+        try:
+            analyze_history()
+        except Exception as ex:
+            logging.error('analyze_history: %s, error: %s',
                           ex, traceback.format_exc())
         WAIT_EVENT_OUTER.clear()
         WAIT_EVENT_OUTER.wait(STATS_COLLECT_SEC)

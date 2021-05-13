@@ -238,7 +238,7 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
             reply.id, reply.chat.id)
 
         if saved_reply_id is None:
-            primary_reply_outer = await client.forward_messages(to_primary_id, reply)
+            primary_reply_outer = await client.forward_messages(to_primary_id, reply, silent=True)
         else:
             chat = await get_chat_by_id(client, to_primary_id)
             primary_reply_outer = await client.get_messages(chat, ids=saved_reply_id)
@@ -250,7 +250,9 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
         message_forwarded = await client.forward_messages(to_primary_id, message)
 
         chat_id = None
-        if message.chat is None:
+        if message.fwd_from is not None and message.fwd_from.from_id is not None:
+            chat_id = message.fwd_from.from_id.channel_id
+        elif message.chat is None:
             chat_id = message.chat_id
         else:
             chat_id = message.chat.id
@@ -335,7 +337,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
 
     is_reply_signal = False
     if reply is not None:
-        reply_text = str(reply.to_dict()['message'])
+        reply_text = message_to_str(reply).lower()
         is_reply_signal = re.search(
             signal_parser.SIGNAL_REGEX, reply_text) is not None
         message_link = re.finditer(LINKS_REGEX, reply_text, re.IGNORECASE)
