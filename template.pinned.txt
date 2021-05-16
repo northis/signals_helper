@@ -5,7 +5,7 @@ Ad-free forex signals are from these channels
 
 Statistics for gold (xauusd) only:
 
-🎯 **accuracy** - average profit, pips (🎯⭱ max profit, 🎯⭳ max loss)
-∑ **total** - means amount of signals since Jan 2020 to the present
-❌ **sl** - average stop loss in signals, pips
-🕑 **signal time** - average (🕑⨏) and max (🕑⭱) signal duration, hours
+🎯 - average profit or accuracy, pips (🎯⭱ max profit, 🎯⭳ max loss)
+∑ - amount of signals since Jan 2020 to the present
+❌ - average stop loss in signals, pips
+🕑  - average (🕑⨏) and max (🕑⭱) signal duration, hours

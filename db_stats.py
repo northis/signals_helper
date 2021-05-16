@@ -451,7 +451,7 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
             amount = channels_stat[8]
             # id_channel = channels_stat[9]
 
-            channel_string = f"{count}. **[{name}]({link})** \n 🎯**{avg_diff}** 🎯⭱{avg_max} 🎯⭳{avg_min} ∑{amount} ❌{avg_sl} 🕑⨏{time_h_avg} 🕑⭱{time_h_max}"
+            channel_string = f"{count}. [{name}]({link}) \n **🎯{avg_diff}** 🎯⭱{avg_max} 🎯⭳{avg_min} ∑{amount} ❌{avg_sl} 🕑⨏{time_h_avg} 🕑⭱{time_h_max}"
             channel_strings.append(channel_string)
             count += 1
 
