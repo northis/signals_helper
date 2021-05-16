@@ -17,6 +17,8 @@ api_id = os.getenv('api_id')
 api_hash = os.getenv('api_hash')
 API_KEY = os.getenv("api_key")
 API_KEY_INVESTING = os.getenv("api_key_investing")
+PINNED_INFO_MESSAGE_ID = os.getenv("pinned_info_message_id")
+TEMPLATE_PINNED_PATH = "template.pinned.txt"
 
 
 def get_json(file):
@@ -29,6 +31,16 @@ def set_json(file, json_object):
     with open(file, 'w', encoding="utf-8") as f:
         json.dump(obj=json_object, fp=f, indent=2,
                   sort_keys=True, ensure_ascii=False)
+
+
+def get_file_text(file):
+    with open(file, 'r', encoding="utf-8") as f:
+        return f.read()
+
+
+def set_file_text(file, string):
+    with open(file, 'w', encoding="utf-8") as f:
+        f.write(string)
 
 
 def get_config():

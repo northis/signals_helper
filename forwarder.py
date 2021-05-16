@@ -33,9 +33,14 @@ async def main_exec(stop_flag: classes.StopFlag):
     while True:
         try:
             async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:
+                primary = None
                 for forward in forwards:
                     await init_forward(forward, client)
+                    if primary is None:
+                        primary = forward.get('to_primary')
 
+                primary_chat = await get_chat_by_id(client, int(primary["id"]))
+                await db_stats.set_pinned(client, forwards, primary_chat)
                 await stop_flag.wait()
                 await client.disconnect()
                 break

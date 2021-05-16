@@ -1,0 +1,11 @@
+All the ad messages are in [Signal links](https://t.me/joinchat/VwR-PVfGRRRmckrJ) channel
+Ad-free forex signals are from these channels
+
+{0}
+
+Statistics for gold (xauusd) only:
+
+🎯 **accuracy** - average profit, pips (🎯⭱ max profit, 🎯⭳ max loss)
+∑ **total** - means amount of signals since Jan 2020 to the present
+❌ **sl** - average stop loss in signals, pips
+🕑 **signal time** - average (🕑⨏) and max (🕑⭱) signal duration, hours

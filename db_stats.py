@@ -23,8 +23,8 @@ lock = threading.Lock()
 lock_increment = threading.Lock()
 
 # if you have lots to analyze, but this can burn you cpu
-# MAX_WORKERS = multiprocessing.cpu_count()
-MAX_WORKERS = 1  # For common usage
+MAX_WORKERS = multiprocessing.cpu_count()
+# MAX_WORKERS = 1  # For common usage
 
 BUSY_THREADS = 0
 pool: Pool
@@ -395,3 +395,76 @@ def upsert_channel(id_, access_url, title):
 
         return (id_, title_safe, access_url, create_date, update_date, history_loaded, history_update_date,
                 history_analyzed, history_analysis_update_date)
+
+
+async def set_pinned(client: TelegramClient, forwards, primary_chat):
+    msg_id = config.PINNED_INFO_MESSAGE_ID
+    if msg_id is None or forwards is None or len(forwards) == 0:
+        return
+    template = config.get_file_text(config.TEMPLATE_PINNED_PATH)
+    if template is None:
+        return
+
+    symbol = classes.Symbol.XAUUSD
+    channel_ids = list()
+    for forward in forwards:
+        channel_ids.append(str(forward['from_chat_id']))
+
+    channels_string = ",".join(channel_ids)
+    channels_stats_query_xau = f"""select
+Name, 
+AccessLink,
+round(avg(diff*10),1) as avg_diff, 
+round(max(diff*10),1) as avg_max,
+round(min(diff*10),1) as avg_min,
+round(avg(sl*10),1) as avg_sl, 
+max(time_h) as time_h_max, 
+round(avg(time_h),1) as time_h_avg, 
+count(IdChannel) as amount, 
+IdChannel
+from (select CASE IsBuy WHEN 0 THEN o.PriceActual - o.ClosePrice  ELSE o.ClosePrice - o.PriceActual END diff,
+    o.IdChannel as IdChannel, 
+	c.Name as Name, 
+	c.AccessLink as AccessLink , 
+	abs(o.PriceActual - o.StopLoss) as sl, 
+	(select Cast ((JulianDay(o.CloseDate) - JulianDay(o.Date )) * 24 As Integer)) as time_h
+    from 'Order' o join 'Channel' c on o.IdChannel = c.Id
+    where ErrorState is NULL and CloseDate is not NULL and Symbol = '{symbol}' 
+    and abs(o.PriceActual - o.PriceSignal)<20) 
+group by IdChannel having IdChannel in ({channels_string}) order by avg_diff desc"""
+
+    template = str(template)
+    channel_strings = list()
+    count = 1
+    with classes.SQLite(config.DB_STATS_PATH, 'set_pinned, db:', None) as cur:
+        channels_stats = cur.execute(channels_stats_query_xau).fetchall()
+
+        for channels_stat in channels_stats:
+            name = channels_stat[0]
+            link = channels_stat[1]
+            avg_diff = channels_stat[2]
+            avg_max = channels_stat[3]
+            avg_min = channels_stat[4]
+            avg_sl = channels_stat[5]
+            time_h_max = channels_stat[6]
+            time_h_avg = channels_stat[7]
+            amount = channels_stat[8]
+            # id_channel = channels_stat[9]
+
+            channel_string = f"{count}. [{name}]({link}) \n 🎯{avg_diff} ⭱{avg_max} ⭳{avg_min} ∑{amount} ❌{avg_sl} 🕑⭱{time_h_max} 🕑⨏{time_h_avg}"
+            channel_strings.append(channel_string)
+            count += 1
+
+    channels_string_res = "\n\n".join(channel_strings)
+    out_string = template.replace("{0}", channels_string_res)
+
+    msg_pinned = await client.get_messages(primary_chat, ids=int(config.PINNED_INFO_MESSAGE_ID))
+    if msg_pinned is None:
+        logging.info('No pinned message found (id is %s)',
+                     config.PINNED_INFO_MESSAGE_ID)
+        return
+
+    try:
+        await client.edit_message(msg_pinned, out_string, link_preview=False, parse_mode='md')
+    except Exception as ex:
+        logging.error('Edit pinned message: %s', ex)
