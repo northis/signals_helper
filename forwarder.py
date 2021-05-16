@@ -2,6 +2,7 @@ import logging
 import asyncio
 import re
 import traceback
+import helper
 from dotenv import load_dotenv
 from telethon import TelegramClient, sync, events, tl, errors
 from telethon.tl.functions.messages import ImportChatInviteRequest, CheckChatInviteRequest, GetDialogsRequest, EditMessageRequest
@@ -265,18 +266,19 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
         db_stats.set_primary_message_id(
             message_forwarded.id, message.id, chat_id)
         logging.info('Forwarding to primary (id = %s)', message.id)
-        return
+        return (message_forwarded.id, chat_id)
 
     if primary_reply_outer is None:
         logging.error(
             'Cannot reply to primary (id = %s), primary_reply_outer is None', message.id)
-        return
+        return None
 
     message_sent = await client.send_message(
         to_primary_id, message, reply_to=primary_reply_outer)
     db_stats.set_primary_message_id(
         message_sent.id, message.id, message.chat_id)
     logging.info('Replying to primary (id = %s)', message.id)
+    return (message_forwarded.id, message.chat_id)
 
 
 async def exit_if_needed(url, channel_id, client):
@@ -350,7 +352,21 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
             contains_no_links = False
             break
 
-    is_signal = re.search(signal_parser.SIGNAL_REGEX, message_text) is not None
+    symbol_search = None
+    signal_search = None
+    tp_search = None
+    sl_search = None
+    is_buy = None
+    symbol = None
+    for symbol_item in signal_parser.symbols_regex_map:
+        symbol_search, signal_search, is_buy, sl_search, tp_search = signal_parser.message_to_signal(
+            message_text, signal_parser.symbols_regex_map[symbol_item])
+        if symbol_search is None:
+            continue
+        symbol = symbol_item
+        break
+
+    is_signal = signal_search is not None
     is_primary = (is_primary or is_tradingview) and contains_no_links and (
         (message.is_reply and is_reply_signal) or is_signal)
 
@@ -360,7 +376,27 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
 
     try:
         if is_primary:
-            await forward_primary(to_primary_id, message, reply, client)
+            forward_res = await forward_primary(to_primary_id, message, reply, client)
+
+            if forward_res is not None and is_signal and symbol_search is not None and not is_reply_signal:
+                price = signal_parser.get_price(signal_search)
+                sl_item = signal_parser.get_sl(sl_search)
+                price = signal_parser.get_price(signal_search)
+                tps = signal_parser.get_tps(tp_search, is_buy)
+                tp_item = None
+                if tps is not None:
+                    for tps_inner in tps:
+                        tp_item = tps_inner
+                        break
+
+                now_str = helper.get_now_utc_iso()
+                db_stats.save_signal(
+                    symbol, forward_res[0], forward_res[1], is_buy, now_str, price, tp_item, sl_item)
+
+                last_signals = db_stats.gel_last_signals(symbol)
+                await client.send_message(
+                    to_primary_id, last_signals, silent=True)
+
         elif to_secondary_id != 0:
             joined = False
             if join_channels:

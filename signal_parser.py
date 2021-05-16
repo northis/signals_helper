@@ -3,6 +3,7 @@ import logging
 import copy
 import classes
 import config
+from collections import namedtuple
 
 import helper
 
@@ -24,6 +25,8 @@ CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"buy"
 PRICE_VALID_PERCENT = 10
 USE_FAST_BOOK = True
+SignalTyple = namedtuple(
+    'Signal', 'symbol_search signal_search is_buy sl_search tp_search')
 
 
 def validate_order(order: dict, next_value: classes.Decimal):
@@ -176,6 +179,46 @@ def str_to_utc_iso_datetime(dt):
     return helper.str_to_utc_iso_datetime(dt, config.DT_INPUT_TIMEZONE, config.DT_INPUT_FORMAT)
 
 
+def message_to_signal(text, symbol_regex):
+    symbol_search = re.search(symbol_regex, text)
+    signal_search = re.search(SIGNAL_REGEX, text)
+    tp_search = re.findall(TP_REGEX, text)
+    sl_search = re.search(SL_REGEX, text)
+    is_buy = re.search(BUY_REGEX, text) != None
+
+    res = SignalTyple(symbol_search, signal_search,
+                      is_buy, sl_search, tp_search)
+    return res
+
+
+def get_tps(tp_search, is_buy):
+    tp_list = list()
+    for tp_entry in tp_search:
+        tp_dec: classes.Decimal = helper.str_to_decimal(tp_entry)
+        if tp_dec is None:
+            continue
+        tp_list.append(tp_dec)
+
+    tp_list = sorted(tp_list)
+    if not is_buy:
+        tp_list = reversed(tp_list)
+    return tp_list
+
+
+def get_sl(sl_search):
+    sl_dec = helper.str_to_decimal(sl_search.group(1))
+    if sl_dec is None:
+        return None
+    return sl_dec
+
+
+def get_price(signal_search):
+    price = helper.str_to_decimal(signal_search.group(4))
+    if price is None:
+        return None
+    return price
+
+
 def string_to_orders(
         msg: str,
         symbol_regex: str,
@@ -196,16 +239,14 @@ def string_to_orders(
     if text is None:
         text = ""
 
-    symbol_search = re.search(symbol_regex, text)
-    signal_search = re.search(SIGNAL_REGEX, text)
-    tp_search = re.findall(TP_REGEX, text)
-    sl_search = re.search(SL_REGEX, text)
+    symbol_search, signal_search, is_buy, sl_search, tp_search = message_to_signal(
+        text, symbol_regex)
+
     breakeven_search = re.search(BREAKEVEN_REGEX, text)
     close_search = re.search(CLOSE_REGEX, text)
     tp_hit_search = re.search(TP_HIT_REGEX, text)
     sl_hit_search = re.search(SL_HIT_REGEX, text)
 
-    is_buy = re.search(BUY_REGEX, text) != None
     has_target_orders = target_orders is not None and len(target_orders) > 0
     is_signal = signal_search is not None
     is_sl = sl_search is not None
@@ -231,7 +272,7 @@ def string_to_orders(
 
     if is_signal:
         # We want to parse signals with price only.
-        price_dec = helper.str_to_decimal(signal_search.group(4))
+        price_dec = get_price(signal_search)
         if price_dec is None:
             logging.debug(
                 "Cannot get price from signal, ignore it. Message text: %s", text)
@@ -246,7 +287,7 @@ def string_to_orders(
         order["is_open"] = True
 
         if is_sl:
-            sl_dec = helper.str_to_decimal(sl_search.group(1))
+            sl_dec = get_sl(sl_search)
             if sl_dec is None:
                 logging.debug(
                     "Cannot get stoploss from signal, ignore it. Message text: %s", text)
@@ -254,17 +295,7 @@ def string_to_orders(
             order["stop_loss"] = sl_dec
 
         if is_tp:
-            tp_list = list()
-            for tp_entry in tp_search:
-                tp_dec: classes.Decimal = helper.str_to_decimal(tp_entry)
-                if tp_dec is None:
-                    continue
-                tp_list.append(tp_dec)
-
-            tp_list = sorted(tp_list)
-            if not is_buy:
-                tp_list = reversed(tp_list)
-
+            tp_list = get_tps(tp_search, is_buy)
             take_profit_index = 0
             for tp_dec in tp_list:
                 take_profit_index += 1

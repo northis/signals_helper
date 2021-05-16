@@ -222,3 +222,16 @@ CREATE TABLE "Order"
 	"ErrorState" TEXT,
 	FOREIGN KEY("IdChannel") REFERENCES "Channel"("Id")
 );
+
+CREATE TABLE "Signal"
+(
+	"IdChannel" INTEGER NOT NULL,
+	"Symbol" TEXT NOT NULL,
+	"IdMessage" INTEGER,
+	"IsBuy" INTEGER NOT NULL DEFAULT 0,
+	"Date" DATETIME NOT NULL,
+	"PriceSignal" NUMERIC,
+	"StopLoss" NUMERIC,
+	"TakeProfit" NUMERIC,
+	FOREIGN KEY("IdChannel") REFERENCES "Channel"("Id")
+);

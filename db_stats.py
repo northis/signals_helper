@@ -468,3 +468,51 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
         await client.edit_message(msg_pinned, out_string, link_preview=False, parse_mode='md')
     except Exception as ex:
         logging.error('Edit pinned message: %s', ex)
+
+
+def gel_last_signals(symbol, top_n=10):
+    with classes.SQLite(config.DB_STATS_PATH, 'save_signal, db:', None) as cur:
+        exec_string = f"SELECT IsBuy FROM 'Signal' WHERE Symbol= '{symbol}' ORDER BY Date DESC LIMIT {top_n}"
+        results = cur.execute(exec_string).fetchall()
+
+        if len(results) == 0:
+            return None
+
+        signals_string = f"{symbol}:"
+        for result in results:
+            signals_string += "🟢" if result[0] else "🔴"
+
+        return signals_string
+    return None
+
+
+def save_signal(symbol, id_channel, id_message, is_buy, date, price, tp=None, sl=None):
+    try:
+        buy_int = 0
+        if is_buy:
+            buy_int = 1
+
+        params = {}
+
+        params["IdChannel"] = int(id_channel)
+        params["Symbol"] = symbol
+        params["IdMessage"] = int(id_message)
+        params["IsBuy"] = int(buy_int)
+        params["Date"] = date
+        params["PriceSignal"] = float(price)
+        if sl is not None:
+            params["StopLoss"] = float(sl)
+        if tp is not None:
+            params["TakeProfit"] = float(tp)
+
+        columns = ', '.join(params.keys())
+        placeholders = ':'+', :'.join(params.keys())
+
+        with classes.SQLite(config.DB_STATS_PATH, 'save_signal, db:', lock) as cur:
+            exec_string = "INSERT INTO 'Signal' (%s) VALUES (%s)" % (
+                columns, placeholders)
+            cur.execute(exec_string, params)
+            return True
+    except Exception as ex:
+        logging.error("Cannot save signal. Error %s", ex)
+        return False
