@@ -411,10 +411,10 @@ async def set_pinned(client: TelegramClient, forwards, primary_chat):
     symbol = classes.Symbol.XAUUSD
     channel_ids = list()
     for forward in forwards:
-        from_chat_id = forward['from_chat_id']
+        from_chat_id = str(forward['from_chat_id'])
         if from_chat_id == config.PINNED_EXCEPT_CHANNEL_ID:
             continue
-        channel_ids.append(str(from_chat_id))
+        channel_ids.append(from_chat_id)
 
     channels_string = ",".join(channel_ids)
     channels_stats_query_xau = f"""select
