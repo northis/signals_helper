@@ -35,8 +35,9 @@ async def main_exec(stop_flag: classes.StopFlag):
         try:
             async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:
                 primary = None
+                dialogs = list(await client.get_dialogs())
                 for forward in forwards:
-                    await init_forward(forward, client)
+                    await init_forward(forward, client, dialogs)
                     if primary is None:
                         primary = forward.get('to_primary')
 
@@ -70,10 +71,17 @@ async def get_chat_by_id(client, id_):
     async for dialog in client.iter_dialogs():
         if id_ == dialog.entity.id or id_ == dialog.id:
             return dialog
-    return 0
+    return None
 
 
-async def init_forward(forward, client):
+def get_chat_by_id_list(id_, dialogs):
+    for dialog in dialogs:
+        if id_ == dialog.entity.id or id_ == dialog.id:
+            return dialog
+    return None
+
+
+async def init_forward(forward, client, dialogs: list):
     from_chat_id = forward['from_chat_id']
     from_chat_title = forward['from_chat_title']
     to_primary = forward['to_primary']
@@ -86,7 +94,7 @@ async def init_forward(forward, client):
             forward['from_chat_id'] = from_chat_id
             is_ready = True
     else:
-        chat = await get_chat_by_id(client, from_chat_id)
+        chat = get_chat_by_id_list(from_chat_id, dialogs)
         if chat is not None:
             chat_title = chat.title
             forward['from_chat_title'] = chat_title
