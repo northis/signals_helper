@@ -378,7 +378,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
         if is_primary:
             forward_res = await forward_primary(to_primary_id, message, reply, client)
 
-            if forward_res is not None and is_signal and symbol_search is not None and not is_reply_signal:
+            if forward_res is not None and is_signal and symbol_search is not None:
                 price = signal_parser.get_price(signal_search)
                 sl_item = signal_parser.get_sl(sl_search)
                 price = signal_parser.get_price(signal_search)

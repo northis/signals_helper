@@ -381,7 +381,7 @@ def upsert_channel(id_, access_url, title):
             return select_channel
 
         if select_channel is None:
-            insert_string = f"INSERT INTO Channel VALUES ({id_},'{title_safe}','{access_url}','{now_str}', NULL, NULL, NULL, NULL, NULL) ON CONFLICT(Id) DO UPDATE SET UpdateDate=excluded.UpdateDate"
+            insert_string = f"INSERT INTO Channel VALUES ({id_},'{title_safe}','{access_url}','{now_str}', NULL, NULL, NULL, NULL, NULL) ON CONFLICT(Id) DO UPDATE SET UpdateDate=excluded.UpdateDate, Name = excluded.Name"
             cur.execute(insert_string)
             return (id_, title_safe, access_url, now_str, None, None, None, None, None)
 
