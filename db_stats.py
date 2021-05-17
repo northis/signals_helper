@@ -389,6 +389,9 @@ def upsert_channel(id_, access_url, title):
             history_loaded, history_update_date,
             history_analyzed, history_analysis_update_date) = select_channel
 
+        if access_url is None:
+            access_url = link
+
         if title_safe != name or access_url != link:
             update_string = f"UPDATE Channel SET Name='{title_safe}', AccessLink='{access_url}', UpdateDate='{now_str}' WHERE Id = {id_}"
             cur.execute(update_string)

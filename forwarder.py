@@ -86,7 +86,12 @@ async def init_forward(forward, client):
             forward['from_chat_id'] = from_chat_id
             is_ready = True
     else:
-        is_ready = True
+        chat = await get_chat_by_id(client, from_chat_id)
+        if chat is not None:
+            chat_title = chat.title
+            forward['from_chat_title'] = chat_title
+            db_stats.upsert_channel(from_chat_id, None, chat_title)
+            is_ready = True
 
     if not is_ready:
         logging.info('Cannot add forward source %s', from_chat_title)
