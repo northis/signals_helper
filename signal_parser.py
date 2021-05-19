@@ -193,6 +193,8 @@ def message_to_signal(text, symbol_regex):
 
 def get_tps(tp_search, is_buy):
     tp_list = list()
+    if tp_search is None:
+        return None
     for tp_entry in tp_search:
         tp_dec: classes.Decimal = helper.str_to_decimal(tp_entry)
         if tp_dec is None:
@@ -206,6 +208,8 @@ def get_tps(tp_search, is_buy):
 
 
 def get_sl(sl_search):
+    if sl_search is None:
+        return None
     sl_dec = helper.str_to_decimal(sl_search.group(1))
     if sl_dec is None:
         return None
@@ -213,6 +217,8 @@ def get_sl(sl_search):
 
 
 def get_price(signal_search):
+    if signal_search is None:
+        return None
     price = helper.str_to_decimal(signal_search.group(4))
     if price is None:
         return None

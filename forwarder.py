@@ -291,7 +291,7 @@ async def forward_primary(to_primary_id, message, reply, client: TelegramClient)
     db_stats.set_primary_message_id(
         message_sent.id, message.id, message.chat_id)
     logging.info('Replying to primary (id = %s)', message.id)
-    return (message_forwarded.id, message.chat_id)
+    return (message_sent.id, message.chat_id)
 
 
 async def exit_if_needed(url, channel_id, client):
