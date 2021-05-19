@@ -391,16 +391,15 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
         if is_primary:
             forward_res = await forward_primary(to_primary_id, message, reply, client)
 
-            if forward_res is not None and is_signal and symbol_search is not None:
+            if forward_res is not None and is_signal and symbol_search is not None and (sl_item is not None or tp_search is not None):
                 price = signal_parser.get_price(signal_search)
                 sl_item = signal_parser.get_sl(sl_search)
                 price = signal_parser.get_price(signal_search)
                 tps = signal_parser.get_tps(tp_search, is_buy)
                 tp_item = None
-                if tps is not None:
-                    for tps_inner in tps:
-                        tp_item = tps_inner
-                        break
+                for tps_inner in tps:
+                    tp_item = tps_inner
+                    break
 
                 now_str = helper.get_now_utc_iso()
                 db_stats.save_signal(
