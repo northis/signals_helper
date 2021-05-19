@@ -9,7 +9,7 @@ import helper
 
 symbols_regex_map = {}
 symbols_regex_map[classes.Symbol.XAUUSD] = "(gold)|(xau)|(xauusd)"
-# symbols_regex_map[classes.Symbol.BTCUSD] = "(btc)|(btcusd)|(btcusdt)|(bitcoin)"
+symbols_regex_map[classes.Symbol.BTCUSD] = "(btc)|(btcusd)|(btcusdt)|(bitcoin)"
 # symbols_regex_map[classes.Symbol.EURUSD] = "(eurusd)"
 # TODO some issues in parsing eurusd 1.xxx prices, going to resolve it in the future, now I wanna focus on gold only
 
