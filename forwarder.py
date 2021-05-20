@@ -238,7 +238,7 @@ async def join_link(url, client):
             logging.info('Just added to channel %s', chat.title)
 
         upsert_res = db_stats.upsert_channel(chat.id, url, chat.title)
-        is_new = upsert_res[4] is None
+        is_new = upsert_res is None or upsert_res[4] is None
         if is_new:
             return chat
 
