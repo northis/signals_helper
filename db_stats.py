@@ -145,7 +145,7 @@ def write_db(input_typle):
                      symbol, channel_id, BUSY_THREADS)
 
         with classes.SQLite(config.DB_STATS_PATH, 'process_channel_symbol:', lock) as cur:
-            exec_string = f"DELETE FROM 'Order' WHERE IdChannel = {channel_id}"
+            exec_string = f"DELETE FROM 'Order' WHERE IdChannel = {channel_id} AND Symbol = '{symbol}'"
             cur.execute(exec_string)
 
             for order in orders_list:
