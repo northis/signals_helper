@@ -6,3 +6,4 @@ __pycache__
 *.ex5
 *.session-journal
 links.json
+.vscode/
