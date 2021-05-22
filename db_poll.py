@@ -24,17 +24,17 @@ class AccessType(Enum):
 
 
 db_time_ranges = {
-    classes.Symbol.AUDUSD: (None, None),
-    classes.Symbol.BTCUSD: (None, None),
-    classes.Symbol.EURUSD: (None, None),
-    classes.Symbol.GBPUSD: (None, None),
-    classes.Symbol.NZDUSD: (None, None),
-    classes.Symbol.USDCAD: (None, None),
-    classes.Symbol.USDCHF: (None, None),
-    classes.Symbol.USDJPY: (None, None),
-    classes.Symbol.USDRUB: (None, None),
-    classes.Symbol.XAGUSD: (None, None),
-    classes.Symbol.XAUUSD: (None, None)
+    classes.Symbol.AUDUSD: (None, None, None),
+    classes.Symbol.BTCUSD: (None, None, None),
+    classes.Symbol.EURUSD: (None, None, None),
+    classes.Symbol.GBPUSD: (None, None, None),
+    classes.Symbol.NZDUSD: (None, None, None),
+    classes.Symbol.USDCAD: (None, None, None),
+    classes.Symbol.USDCHF: (None, None, None),
+    classes.Symbol.USDJPY: (None, None, None),
+    classes.Symbol.USDRUB: (None, None, None),
+    classes.Symbol.XAGUSD: (None, None, None),
+    classes.Symbol.XAUUSD: (None, None, None)
 }
 
 # lock = threading.Lock()
@@ -77,13 +77,16 @@ def update_db_time_ranges():
 def update_db_time_range(symbol):
     with classes.SQLite(config.DB_SYMBOLS_PATH, 'update_db_time_range:', None) as cur:
         # Fill the DB first, this code thinks it will return something anyway
-        exec_string = f"SELECT [DateTime] From {symbol} ORDER BY [DateTime]"
+        exec_string = f"SELECT [DateTime], Close From {symbol} ORDER BY [DateTime]"
 
         dates = db_time_ranges[symbol]
         date_start = None
+        last_price = None
 
         if dates[0] is None:
-            result = cur.execute(exec_string).fetchone()[0]
+            first_row = cur.execute(exec_string).fetchone()
+            result = first_row[0]
+            last_price = first_row[1]
             date_start = helper.str_to_utc_datetime(
                 result, "UTC", config.DB_DATE_FORMAT)
         else:
@@ -94,7 +97,7 @@ def update_db_time_range(symbol):
         date_end = helper.str_to_utc_datetime(
             result, "UTC", config.DB_DATE_FORMAT)
 
-        db_time_ranges[symbol] = (date_start, date_end)
+        db_time_ranges[symbol] = (date_start, date_end, last_price)
 
         dates = f"symbol:{symbol}, date_start: {date_start}, date_end: {date_end}"
         logging.info(dates)

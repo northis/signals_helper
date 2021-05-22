@@ -11,6 +11,7 @@ import config
 import classes
 import db_stats
 import signal_parser
+import db_poll
 
 SIGNAL_REGEX = r"(buy)|(sell)"
 LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
@@ -30,6 +31,12 @@ def message_to_str(message):
     return str(message.to_dict()['message'])
 
 
+def is_price_actual(symbol: classes.Symbol, price: float):
+    price_actual = db_poll.db_time_ranges[symbol][2]
+    res = abs(price-price_actual)/price_actual < 0.1
+    return res
+
+
 async def main_exec(stop_flag: classes.StopFlag):
     while True:
         try:
@@ -43,6 +50,7 @@ async def main_exec(stop_flag: classes.StopFlag):
 
                 primary_chat = await get_chat_by_id(client, int(primary["id"]))
                 await db_stats.set_pinned(client, forwards, primary_chat)
+                await db_stats.bulk_exit(client)
                 await stop_flag.wait()
                 await client.disconnect()
                 break
@@ -366,32 +374,46 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
             break
 
     symbol_search = None
+    symbol_search_reply = None
     signal_search = None
     tp_search = None
     sl_search = None
     is_buy = None
     symbol = None
+
     for symbol_item in signal_parser.symbols_regex_map:
         symbol_search, signal_search, is_buy, sl_search, tp_search = signal_parser.message_to_signal(
             message_text, signal_parser.symbols_regex_map[symbol_item])
+
+        if is_reply_signal:
+            reply_res = signal_parser.message_to_signal(
+                reply_text, signal_parser.symbols_regex_map[symbol_item])
+            if symbol_search_reply is not None:
+                symbol_search_reply = reply_res[0]
+
         if symbol_search is None:
             continue
         symbol = symbol_item
         break
 
+    is_symbol = symbol_search is not None
+    is_symbol_reply = symbol_search_reply is not None
     is_signal = signal_search is not None
     is_primary = (is_primary or is_tradingview) and contains_no_links and (
-        (message.is_reply and is_reply_signal) or is_signal)
+        (message.is_reply and is_reply_signal and is_symbol_reply) or (is_signal and is_symbol))
 
     logging.info(
         'Message %s (contains_no_links=%s, is_signal=%s)',
         message.id, contains_no_links, is_signal)
 
+    has_sl = sl_search is not None
+    has_tp = tp_search is not None
     try:
         if is_primary:
             forward_res = await forward_primary(to_primary_id, message, reply, client)
 
-            if forward_res is not None and is_signal and symbol_search is not None and sl_search is not None and tp_search is not None:
+            price_signal = signal_parser.get_price(signal_search)
+            if is_price_actual(symbol, price_signal) and forward_res is not None and is_signal and is_symbol and (has_sl or has_tp):
                 price = signal_parser.get_price(signal_search)
                 sl_item = signal_parser.get_sl(sl_search)
                 price = signal_parser.get_price(signal_search)

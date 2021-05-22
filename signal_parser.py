@@ -8,18 +8,18 @@ from collections import namedtuple
 import helper
 
 symbols_regex_map = {}
-symbols_regex_map[classes.Symbol.XAUUSD] = "(gold)|(xau)|(xauusd)"
-symbols_regex_map[classes.Symbol.BTCUSD] = "(btc)|(btcusd)|(btcusdt)|(bitcoin)"
+symbols_regex_map[classes.Symbol.XAUUSD] = "(gold)|(xau[\s\\\/-]*usd)"
+symbols_regex_map[classes.Symbol.BTCUSD] = "(btc[\s\\\/-]*usd[t]?)"
 # symbols_regex_map[classes.Symbol.EURUSD] = "(eurusd)"
 # TODO some issues in parsing eurusd 1.xxx prices, going to resolve it in the future, now I wanna focus on gold only
 
 
-SIGNAL_REGEX = r"((buy)|(sel[l]?))[\D]*([0-9]{1,8}[.,]?[0-9]{0,5})"
-TP_REGEX = r"tp\s?\d?[\D]+([0-9]{1,8}[.,]?[0-9]{0,5})"
-SL_REGEX = r"sl[\D]*([0-9]{1,8}\.?[0-9]{0,5})"
+SIGNAL_REGEX = r"(buy|sel[l]?)[\D]*([0-9]{1,8}[.,:\s]?[0-9]{0,5})"
+TP_REGEX = r"t(ake\s)?p(rofit)?[\D]*([1-5]?)([\D])*([0-9]{1,8}[.,:\s]?[0-9]{0,5})$"
+SL_REGEX = r"s(top\s)?l(oss)?[\D]*([0-9]{1,8}[.,:\s]?[0-9]{0,5}?)"
 # PRICE_REGEX = r"([0-9]{4}\.?[0-9]{0,2})"
 BREAKEVEN_REGEX = r"(book)|(entry point)|(breakeven)"
-SL_HIT_REGEX = r"(sl|stoplos[s]?)(.)*hit"
+SL_HIT_REGEX = r"(sl|stop[\s]?los[s]?)(.)*hit"
 TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"buy"
@@ -181,9 +181,9 @@ def str_to_utc_iso_datetime(dt):
 
 def message_to_signal(text, symbol_regex):
     symbol_search = re.search(symbol_regex, text)
-    signal_search = re.search(SIGNAL_REGEX, text)
-    tp_search = re.findall(TP_REGEX, text)
-    sl_search = re.search(SL_REGEX, text)
+    signal_search = re.search(SIGNAL_REGEX, text, flags=re.MULTILINE)
+    tp_search = re.findall(TP_REGEX, text, flags=re.MULTILINE)
+    sl_search = re.search(SL_REGEX, text, flags=re.MULTILINE)
     is_buy = re.search(BUY_REGEX, text) != None
 
     res = SignalTyple(symbol_search, signal_search,
@@ -196,7 +196,12 @@ def get_tps(tp_search, is_buy):
     if tp_search is None:
         return None
     for tp_entry in tp_search:
-        tp_dec: classes.Decimal = helper.str_to_decimal(tp_entry)
+
+        tp_str = tp_entry[4]
+        if tp_entry[3] is '':
+            tp_str = f"{tp_entry[2]}{tp_str}"
+
+        tp_dec: classes.Decimal = helper.str_to_decimal(tp_str)
         if tp_dec is None:
             continue
         tp_list.append(tp_dec)
@@ -210,7 +215,7 @@ def get_tps(tp_search, is_buy):
 def get_sl(sl_search):
     if sl_search is None:
         return None
-    sl_dec = helper.str_to_decimal(sl_search.group(1))
+    sl_dec = helper.str_to_decimal(sl_search.group(3))
     if sl_dec is None:
         return None
     return sl_dec
@@ -219,7 +224,7 @@ def get_sl(sl_search):
 def get_price(signal_search):
     if signal_search is None:
         return None
-    price = helper.str_to_decimal(signal_search.group(4))
+    price = helper.str_to_decimal(signal_search.group(2))
     if price is None:
         return None
     return price

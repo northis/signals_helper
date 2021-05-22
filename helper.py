@@ -40,7 +40,8 @@ def str_to_decimal(string):
     if string is None:
         return None
     try:
-        dec = decimal.Decimal(string.replace(",", "."))
+        dec = decimal.Decimal(string.replace(",", ".").replace(
+            ":", ".").replace(" ", ".").replace("-", ".").replace("\n", ""))
         return dec
     except:
         return None
