@@ -60,11 +60,11 @@ async def process_history():
     while not WAIT_EVENT_OUTER.is_set():
         if WAIT_EVENT_OUTER.is_set():
             break
-        # try:
-        #     await download_history()
-        # except Exception as ex:
-        #     logging.error('download_history: %s, error: %s',
-        #                   ex, traceback.format_exc())
+        try:
+            await download_history()
+        except Exception as ex:
+            logging.error('download_history: %s, error: %s',
+                          ex, traceback.format_exc())
         try:
             analyze_history()
         except Exception as ex:
@@ -201,23 +201,13 @@ def analyze_history():
         channels_ids = cur.execute(exec_string).fetchall()
 
     channels_ready = 0
-    analyze_channel(1295992076)
-    # for channel_id in channels_ids:
-    #     local_channel_id = channel_id[0]
-    #     analyze_channel(local_channel_id)
-    #     channels_ready += 1
-    #     if WAIT_EVENT_OUTER.is_set():
-    #         return
-
-
-async def bulk_exit(client):
-    exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded = 1 ORDER BY HistoryUpdateDate DESC"
-    with classes.SQLite(config.DB_STATS_PATH, 'bulk_exit, db:', None) as cur:
-        channels = cur.execute(exec_string).fetchall()
-        for channel in channels:
-            channel_id = channel[0]
-            channel_link = channel[1]
-            await forwarder.exit_if_needed(channel_link, channel_id, client)
+    # analyze_channel(1295992076)
+    for channel_id in channels_ids:
+        local_channel_id = channel_id[0]
+        analyze_channel(local_channel_id)
+        channels_ready += 1
+        if WAIT_EVENT_OUTER.is_set():
+            return
 
 
 async def download_history():
@@ -334,7 +324,7 @@ def get_db_safe_title(title):
 
 def is_history_loaded(channel_id, url, title):
     upsert_res = upsert_channel(channel_id, url, title)
-    if upsert_channel is None:
+    if upsert_channel is None or upsert_res is None:
         return False
 
     got_history = upsert_res[5] is not None
