@@ -50,7 +50,7 @@ async def main_exec(stop_flag: classes.StopFlag):
 
                 primary_chat = await get_chat_by_id(client, int(primary["id"]))
                 await db_stats.set_pinned(client, forwards, primary_chat)
-                await db_stats.bulk_exit(client)
+                await bulk_exit(client)
                 await stop_flag.wait()
                 await client.disconnect()
                 break
@@ -312,6 +312,15 @@ async def exit_if_needed(url, channel_id, client):
         logging.info('Exit from channel %s', channel_id)
         exit_res = await client(LeaveChannelRequest(channel_id))
         logging.info('Exited %s', exit_res)
+
+
+async def bulk_exit(client):
+    async for dialog in client.iter_dialogs():
+        channel_id = dialog.entity.id
+        if db_stats.is_history_loaded(channel_id, None, None) and channel_id not in main_channels:
+            logging.info('Exit from channel %s', channel_id)
+            exit_res = await client(LeaveChannelRequest(channel_id))
+            logging.info('Exited %s', exit_res)
 
 
 async def main_edit_message(to_primary_id, client, event):
