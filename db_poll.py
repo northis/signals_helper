@@ -81,7 +81,6 @@ def update_db_time_range(symbol):
 
         dates = db_time_ranges[symbol]
         date_start = None
-        last_price = None
 
         if dates[0] is None:
             first_row = cur.execute(exec_string).fetchone()
@@ -93,9 +92,10 @@ def update_db_time_range(symbol):
             date_start = dates[0]
 
         exec_string = f"{exec_string} DESC"
-        result = cur.execute(exec_string).fetchone()[0]
+        result = cur.execute(exec_string).fetchone()
         date_end = helper.str_to_utc_datetime(
-            result, "UTC", config.DB_DATE_FORMAT)
+            result[0], "UTC", config.DB_DATE_FORMAT)
+        last_price = result[1]
 
         db_time_ranges[symbol] = (date_start, date_end, last_price)
 

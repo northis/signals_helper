@@ -198,7 +198,7 @@ def get_tps(tp_search, is_buy):
     for tp_entry in tp_search:
 
         tp_str = tp_entry[4]
-        if tp_entry[3] is '':
+        if tp_entry[3] == '':
             tp_str = f"{tp_entry[2]}{tp_str}"
 
         tp_dec: classes.Decimal = helper.str_to_decimal(tp_str)

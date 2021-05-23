@@ -32,8 +32,8 @@ def message_to_str(message):
 
 
 def is_price_actual(symbol: classes.Symbol, price: float):
-    price_actual = db_poll.db_time_ranges[symbol][2]
-    res = abs(price-price_actual)/price_actual < 0.1
+    price_actual = float(db_poll.db_time_ranges[symbol][2])
+    res = abs(float(price)-price_actual)/price_actual < 0.1
     return res
 
 
