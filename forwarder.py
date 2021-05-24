@@ -397,7 +397,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
         if is_reply_signal:
             reply_res = signal_parser.message_to_signal(
                 reply_text, signal_parser.symbols_regex_map[symbol_item])
-            if symbol_search_reply is not None:
+            if symbol_search_reply is None:
                 symbol_search_reply = reply_res[0]
 
         if symbol_search is None:
