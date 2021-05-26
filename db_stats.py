@@ -461,7 +461,6 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
             last_date = channels_stat[10]
             first_date = channels_stat[11]
 
-            channel_strings.append(channel_string)
             table.add_row(
                 ["~ score, pips:", f"**{avg_diff}**", f"▲{avg_max} ▼{avg_min}"])
             table.add_row(["total signals:", amount,
@@ -469,6 +468,7 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
             table.add_row(["~ score, pips:", avg_sl, ""])
             table.add_row(["~ duration, hours:", time_h_avg, f"▲{time_h_max}"])
             channel_string = f"{count}. [{name}]({link}) ({id_channel})\n```{table}```"
+            channel_strings.append(channel_string)
             count += 1
 
     channels_string_res = "\n\n".join(channel_strings)
