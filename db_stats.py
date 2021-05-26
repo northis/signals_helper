@@ -11,7 +11,6 @@ import multiprocessing
 from telethon import TelegramClient, errors, functions
 import classes
 import config
-import prettytable as pt
 
 import helper
 import forwarder
@@ -442,12 +441,6 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
         channels_stats = cur.execute(channels_stats_query_xau).fetchall()
 
         for channels_stat in channels_stats:
-            table = pt.PrettyTable(['Name', 'Value', 'Note'])
-            table.border = False
-            table.header = False
-            table.align['Name'] = 'l'
-            table.align['Value'] = 'l'
-            table.align['Note'] = 'l'
             name = channels_stat[0]
             link = channels_stat[1]
             avg_diff = channels_stat[2]
@@ -461,13 +454,7 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
             last_date = channels_stat[10]
             first_date = channels_stat[11]
 
-            table.add_row(
-                ["~ score, pips:", f"**{avg_diff}**", f"▲{avg_max} ▼{avg_min}"])
-            table.add_row(["total signals:", amount,
-                           f"{first_date} - {last_date}"])
-            table.add_row(["~ score, pips:", avg_sl, ""])
-            table.add_row(["~ duration, hours:", time_h_avg, f"▲{time_h_max}"])
-            channel_string = f"{count}. [{name}]({link}) ({id_channel})\n```{table}```"
+            channel_string = f"{count}. [{name}]({link}) ({id_channel})\n**~ score, pips:\t{avg_diff}** (▲{avg_max} ▼{avg_min})\ntotal signals:\t{amount} ({first_date} - {last_date})\n~ stoploss, pips:    \t{avg_sl}\n~ duration, hours:\t{time_h_avg} (▲{time_h_max})"
             channel_strings.append(channel_string)
             count += 1
 
