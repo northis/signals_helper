@@ -468,7 +468,7 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
                            f"{first_date} - {last_date}"])
             table.add_row(["~ score, pips:", avg_sl])
             table.add_row(["~ duration, hours:", f"▲{time_h_max}"])
-            channel_string = f"{count}. [{name}]({link}) ({id_channel})\n{table}"
+            channel_string = f"{count}. [{name}]({link}) ({id_channel})\n```{table}```"
             count += 1
 
     channels_string_res = "\n\n".join(channel_strings)
