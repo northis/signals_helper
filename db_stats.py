@@ -11,6 +11,7 @@ import multiprocessing
 from telethon import TelegramClient, errors, functions
 import classes
 import config
+import prettytable as pt
 
 import helper
 import forwarder
@@ -436,10 +437,17 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
     template = str(template)
     channel_strings = list()
     count = 1
+
     with classes.SQLite(config.DB_STATS_PATH, 'set_pinned, db:', None) as cur:
         channels_stats = cur.execute(channels_stats_query_xau).fetchall()
 
         for channels_stat in channels_stats:
+            table = pt.PrettyTable(['Name', 'Value', 'Note'])
+            table.border = False
+            table.header = False
+            table.align['Name'] = 'l'
+            table.align['Value'] = 'l'
+            table.align['Note'] = 'l'
             name = channels_stat[0]
             link = channels_stat[1]
             avg_diff = channels_stat[2]
@@ -453,8 +461,14 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
             last_date = channels_stat[10]
             first_date = channels_stat[11]
 
-            channel_string = f"{count}. [{name}]({link}) ({id_channel})\n**avg score, pips:          {avg_diff}** (▲{avg_max} ▼{avg_min})\ntotal signals:                {amount} ({first_date} - {last_date})\navg stoploss, pips:    \t{avg_sl}\navg duration, hours: {time_h_avg} (▲{time_h_max})"
             channel_strings.append(channel_string)
+            table.add_row(
+                ["~ score, pips:", f"**{avg_diff}**", f"▲{avg_max} ▼{avg_min}"])
+            table.add_row(["total signals:", avg_diff,
+                           f"{first_date} - {last_date}"])
+            table.add_row(["~ score, pips:", avg_sl])
+            table.add_row(["~ duration, hours:", f"▲{time_h_max}"])
+            channel_string = f"{count}. [{name}]({link}) ({id_channel})\n{table}"
             count += 1
 
     channels_string_res = "\n\n".join(channel_strings)
