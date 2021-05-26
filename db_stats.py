@@ -408,7 +408,7 @@ async def set_pinned(client: TelegramClient, forwards, primary_chat):
         channel_ids.append(from_chat_id)
 
     channels_string = ",".join(channel_ids)
-    channels_stats_query_xau = f"""select
+    channels_stats_query_xau = f"""select 
 Name, 
 AccessLink,
 round(avg(diff*10),1) as avg_diff, 
@@ -420,9 +420,9 @@ round(avg(time_h),1) as time_h_avg,
 count(IdChannel) as amount, 
 IdChannel,
 max(close_date) as last_date,
-min(close_date) as first_date,
+min(close_date) as first_date
 from (select CASE IsBuy WHEN 0 THEN o.PriceActual - o.ClosePrice  ELSE o.ClosePrice - o.PriceActual END diff,
-    o.CloseDate ad close_date
+    o.CloseDate as close_date,
     o.IdChannel as IdChannel, 
 	c.Name as Name, 
 	c.AccessLink as AccessLink , 
