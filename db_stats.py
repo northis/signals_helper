@@ -419,8 +419,8 @@ max(time_h) as time_h_max,
 round(avg(time_h),1) as time_h_avg, 
 count(IdChannel) as amount, 
 IdChannel,
-max(close_date) as last_date,
-min(close_date) as first_date
+strftime('%d.%m.%Y',max(close_date)) as last_date,
+strftime('%d.%m.%Y',min(close_date)) as first_date
 from (select CASE IsBuy WHEN 0 THEN o.PriceActual - o.ClosePrice  ELSE o.ClosePrice - o.PriceActual END diff,
     o.CloseDate as close_date,
     o.IdChannel as IdChannel, 
@@ -450,8 +450,8 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
             time_h_avg = channels_stat[7]
             amount = channels_stat[8]
             id_channel = channels_stat[9]
-            last_date = channels_stat[10].strftime('%d.%m.%Y')
-            first_date = channels_stat[11].strftime('%d.%m.%Y')
+            last_date = channels_stat[10]
+            first_date = channels_stat[11]
 
             channel_string = f"{count}. [{name}]({link}) ({id_channel})\n**avg score, pips:          {avg_diff}** (▲{avg_max} ▼{avg_min})\ntotal signals:                {amount}({first_date} - {last_date})\navg stoploss, pips:    \t{avg_sl}\navg duration, hours: {time_h_avg} (▲{time_h_max})"
             channel_strings.append(channel_string)
