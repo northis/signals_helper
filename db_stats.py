@@ -446,9 +446,9 @@ group by IdChannel having IdChannel in ({channels_string}) order by avg_diff des
             time_h_max = channels_stat[6]
             time_h_avg = channels_stat[7]
             amount = channels_stat[8]
-            # id_channel = channels_stat[9]
+            id_channel = channels_stat[9]
 
-            channel_string = f"{count}. [{name}]({link}) \n**avg score, pips:     {avg_diff}** (▲{avg_max} ▼{avg_min})\ntotal signals:       {amount}\navg stoploss, pips:  \t{avg_sl}\navg duration, hours: {time_h_avg} (▲{time_h_max})"
+            channel_string = f"{count}. [{name}]({link}) ({id_channel})\n**avg score, pips:          {avg_diff}** (▲{avg_max} ▼{avg_min})\ntotal signals:                {amount}\navg stoploss, pips:    \t{avg_sl}\navg duration, hours:  {time_h_avg} (▲{time_h_max})"
             channel_strings.append(channel_string)
             count += 1
 
