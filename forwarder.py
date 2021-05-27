@@ -13,7 +13,6 @@ import db_stats
 import signal_parser
 import db_poll
 
-SIGNAL_REGEX = r"(buy)|(sell)"
 LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()!@:%_\+.~#?&\/\/=]*)"
 
 INVITE_REGEX = r"joinchat\/(.+)"
@@ -424,24 +423,27 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
             forward_res = await forward_primary(to_primary_id, message, reply, client)
 
             price_signal = signal_parser.get_price(signal_search)
-            if is_price_actual(symbol, price_signal) and forward_res is not None and is_signal and is_symbol and (has_sl or has_tp):
-                price = signal_parser.get_price(signal_search)
-                sl_item = signal_parser.get_sl(sl_search)
-                price = signal_parser.get_price(signal_search)
-                tps = signal_parser.get_tps(tp_search, is_buy)
-                tp_item = None
-                for tps_inner in tps:
-                    tp_item = tps_inner
-                    break
+            should_send_stat_msg = is_price_actual(
+                symbol, price_signal) and forward_res is not None and is_signal and is_symbol and (has_sl or has_tp)
+            if not should_send_stat_msg:
+                return
 
-                now_str = helper.get_now_utc_iso()
-                db_stats.save_signal(
-                    symbol, forward_res[0], forward_res[1], is_buy, now_str, price, tp_item, sl_item)
+            price = signal_parser.get_price(signal_search)
+            sl_item = signal_parser.get_sl(sl_search)
+            price = signal_parser.get_price(signal_search)
+            tps = signal_parser.get_tps(tp_search, is_buy)
 
-                last_signals = db_stats.gel_last_signals(symbol)
-                await client.send_message(
-                    to_primary_id, last_signals, silent=True)
+            tp_item = None
+            for tps_inner in tps:
+                tp_item = tps_inner
+                break
 
+            now_str = helper.get_now_utc_iso()
+            db_stats.save_signal(
+                symbol, forward_res[0], forward_res[1], is_buy, now_str, price, tp_item, sl_item)
+
+            last_signals = db_stats.gel_last_signals(symbol)
+            await client.send_message(to_primary_id, last_signals, silent=True)
         elif to_secondary_id != 0:
             joined = False
             if join_channels:

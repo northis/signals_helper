@@ -3,6 +3,7 @@ import datetime
 import decimal
 import pytz
 import config
+import re
 
 
 def get_now_utc_iso():
@@ -36,12 +37,14 @@ def str_to_utc_iso_datetime(dt, timezone, input_format):
     return dt_typed.isoformat()
 
 
-def str_to_decimal(string):
+def str_to_decimal(string: str):
     if string is None:
         return None
     try:
-        dec = decimal.Decimal(string.replace(",", ".").replace(
-            ":", ".").replace(" ", ".").replace("-", ".").replace("\n", ""))
+        if "," in string and "." in string:
+            string = string.replace(",", "")
+
+        dec = decimal.Decimal(re.sub(r"\D", ".", string, 1).replace("\n", ""))
         return dec
     except:
         return None

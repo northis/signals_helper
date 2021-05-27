@@ -14,15 +14,15 @@ symbols_regex_map[classes.Symbol.BTCUSD] = "(btc[\s\\\/-]*usd[t]?)"
 # TODO some issues in parsing eurusd 1.xxx prices, going to resolve it in the future, now I wanna focus on gold only
 
 
-SIGNAL_REGEX = r"(buy|sel[l]?)[\D]*([0-9]{1,8}[.,:\s]?[0-9]{0,5})"
+SIGNAL_REGEX = r"(b[a|u]y|sel[l]?)[\D]*([0-9]{1,8}[.,;:\s]?[0-9]{0,5})"
 TP_REGEX = r"t(ake\s)?p(rofit)?[\D]*([1-5]?)([\D])*([0-9]{1,8}[.,:\s]?[0-9]{0,5})$"
-SL_REGEX = r"s(top\s)?l(oss)?[\D]*([0-9]{1,8}[.,:\s]?[0-9]{0,5}?)"
+SL_REGEX = r"s(top\s)?l(oss)?[\D]*([0-9]{1,8}[.,;:\s]?[0-9]{0,5}?)"
 # PRICE_REGEX = r"([0-9]{4}\.?[0-9]{0,2})"
 BREAKEVEN_REGEX = r"(book)|(entry point)|(breakeven)"
 SL_HIT_REGEX = r"(sl|stop[\s]?los[s]?)(.)*hit"
 TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
-BUY_REGEX = r"buy"
+BUY_REGEX = r"b[a|u]y"
 PRICE_VALID_PERCENT = 10
 USE_FAST_BOOK = True
 SignalTyple = namedtuple(
