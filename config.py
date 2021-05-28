@@ -5,6 +5,7 @@ load_dotenv()
 
 DB_DATE_FORMAT = r"%Y-%m-%d %H:%M:%S+00:00"
 ISO_DATE_FORMAT = r"%Y-%m-%dT%H:%M:%S+00:00"
+ISO_LOCAL_DATE_FORMAT = r"%Y-%m-%dT%H:%M:%S"
 SESSION_FILE = 'secure_session.session'
 SESSION_HISTORY_FILE = 'secure_session_history.session'
 DT_INPUT_FORMAT = r"%Y-%m-%dT%H:%M:%S"

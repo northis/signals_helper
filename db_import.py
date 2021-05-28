@@ -1,8 +1,8 @@
 import datetime
 import decimal
 import fileinput
-import os
 import sqlite3
+import os
 
 from dotenv import load_dotenv
 
@@ -13,6 +13,37 @@ load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
 COMMIT_BATCH_ROW_COUNT = 1000000
+
+
+def convert_history_json(file_in, timezone_local):
+    json = config.get_json(file_in)
+    json_array = json.get("messages")
+    channel_id = json.get("id")
+    if json_array is None or channel_id is None:
+        print("Cannot parse Telegram history json")
+        return
+
+    messages_list = list()
+    for message in json_array:
+        msg_props = dict()
+        msg_props["id"] = message["id"]
+        msg_props["date"] = helper.str_to_utc_datetime(
+            message["date"], timezone_local, config.ISO_LOCAL_DATE_FORMAT).isoformat()
+
+        message_item = message.get("text")
+        if message_item is not None:
+            msg_props["text"] = str(message_item)
+
+        reply_to_message_id = message.get("reply_to_message_id")
+        if reply_to_message_id is not None:
+            msg_props["reply_to_msg_id"] = reply_to_message_id
+
+        messages_list.append(msg_props)
+
+    out_path = os.path.join(
+        config.CHANNELS_HISTORY_DIR, f"{channel_id}.json")
+    config.set_json(out_path, messages_list)
+    print(f"Saved as {out_path}")
 
 
 def import_csv(symbol, input_file, symbol_last_datetime):
@@ -124,4 +155,11 @@ def import_all_example():
 
 
 if __name__ == "__main__":
-    import_json("links.json")
+    print("Telegram history json import and conversion")
+    print("Enter input file path")
+    input_file = input()
+    print(f"Enter timezone of the file, for ex. {config.DT_INPUT_TIMEZONE}")
+    timezone_local = input()
+    convert_history_json(input_file, timezone_local)
+    print("Done, press any key to exit")
+    input()
