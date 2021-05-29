@@ -24,7 +24,7 @@ TP_HIT_REGEX = r"tp[\D]*\d?[^.,\d].*hit"
 CLOSE_REGEX = r"(exit)|(close)"
 BUY_REGEX = r"b[a|u]y"
 PRICE_VALID_PERCENT = 10
-USE_FAST_BOOK = False
+USE_FAST_BOOK = True
 SignalTyple = namedtuple(
     'Signal', 'symbol_search signal_search is_buy sl_search tp_search')
 
