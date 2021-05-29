@@ -19,11 +19,13 @@ import signal_parser
 STATS_COLLECT_SEC = 1*60*60  # 1 hour
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 STATS_ANALYZE_LOOP_GAP_SEC = 10
+RESET_HISTORY_BATCH = 25
+RESET_HISTORY_DEEP_DAYS = 4
 lock = threading.Lock()
 lock_increment = threading.Lock()
 
 # if you have lots to analyze, but this can burn you cpu
-# MAX_WORKERS = multiprocessing.cpu_count()
+#MAX_WORKERS = multiprocessing.cpu_count()
 MAX_WORKERS = 1  # For common usage
 
 BUSY_THREADS = 0
@@ -72,10 +74,17 @@ async def process_history():
                           ex, traceback.format_exc())
         WAIT_EVENT_OUTER.clear()
         WAIT_EVENT_OUTER.wait(STATS_COLLECT_SEC)
+        reset_random_channels()
     print("Closing processes...")
     WAIT_EVENT_INNER.set()
     pool.close()
     pool.join()
+
+
+def reset_random_channels():
+    with classes.SQLite(config.DB_STATS_PATH, 'reset_random_channels:', lock) as cur:
+        exec_string = f"update 'Channel' SET HistoryAnalyzed = 0, HistoryLoaded = 0 where Id in (select Id from 'Channel' WHERE HistoryAnalyzed = 1 and HistoryAnalysisUpdateDate < date('now','-{RESET_HISTORY_DEEP_DAYS} day') ORDER BY RANDOM() LIMIT {RESET_HISTORY_BATCH})"
+        cur.execute(exec_string)
 
 
 def analyze_channel(channel_id):
