@@ -209,7 +209,7 @@ def message_to_signal(text, symbol_regex):
 def get_tps(tp_search, is_buy):
     tp_list = list()
     if tp_search is None:
-        return None
+        return get_tps
     for tp_entry in tp_search:
 
         tp_str = tp_entry[4]
@@ -223,7 +223,7 @@ def get_tps(tp_search, is_buy):
 
     tp_list = sorted(tp_list)
     if not is_buy:
-        tp_list = reversed(tp_list)
+        tp_list = list(reversed(tp_list))
     return tp_list
 
 

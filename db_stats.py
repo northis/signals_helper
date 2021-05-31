@@ -210,7 +210,6 @@ def analyze_history():
         channels_ids = cur.execute(exec_string).fetchall()
 
     channels_ready = 0
-    # analyze_channel(1295992076)
     for channel_id in channels_ids:
         local_channel_id = channel_id[0]
         analyze_channel(local_channel_id)
