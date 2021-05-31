@@ -385,14 +385,15 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
 
     symbol_search = None
     symbol_search_reply = None
-    signal_search = None
-    tp_search = None
-    sl_search = None
+    price = None
     is_buy = None
+    sl = None
+    tps = None
+
     symbol = None
 
     for symbol_item in signal_parser.symbols_regex_map:
-        symbol_search, signal_search, is_buy, sl_search, tp_search = signal_parser.message_to_signal(
+        symbol_search, price, is_buy, sl, tps = signal_parser.message_to_signal(
             message_text, signal_parser.symbols_regex_map[symbol_item])
 
         if is_reply_signal:
@@ -408,7 +409,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
 
     is_symbol = symbol_search is not None
     is_symbol_reply = symbol_search_reply is not None
-    is_signal = signal_search is not None
+    is_signal = price is not None
     is_primary = (is_primary or is_tradingview) and contains_no_links and (
         (message.is_reply and is_reply_signal and is_symbol_reply) or (is_signal and is_symbol))
 
@@ -416,22 +417,16 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
         'Message %s (contains_no_links=%s, is_signal=%s)',
         message.id, contains_no_links, is_signal)
 
-    has_sl = sl_search is not None
-    has_tp = tp_search is not None
+    has_sl = sl is not None
+    has_tp = tps is not None and len(tps) > 0
     try:
         if is_primary:
             forward_res = await forward_primary(to_primary_id, message, reply, client)
 
-            price_signal = signal_parser.get_price(signal_search)
             should_send_stat_msg = is_price_actual(
-                symbol, price_signal) and forward_res is not None and is_signal and is_symbol and (has_sl or has_tp)
+                symbol, price) and forward_res is not None and is_signal and is_symbol and (has_sl or has_tp)
             if not should_send_stat_msg:
                 return
-
-            price = signal_parser.get_price(signal_search)
-            sl_item = signal_parser.get_sl(sl_search)
-            price = signal_parser.get_price(signal_search)
-            tps = signal_parser.get_tps(tp_search, is_buy)
 
             tp_item = None
             for tps_inner in tps:
@@ -440,7 +435,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
 
             now_str = helper.get_now_utc_iso()
             db_stats.save_signal(
-                symbol, forward_res[0], forward_res[1], is_buy, now_str, price, tp_item, sl_item)
+                symbol, forward_res[0], forward_res[1], is_buy, now_str, price, tp_item, sl)
 
             last_signals = db_stats.gel_last_signals(symbol)
             await client.send_message(to_primary_id, last_signals, silent=True)

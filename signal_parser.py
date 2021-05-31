@@ -26,7 +26,7 @@ BUY_REGEX = r"b[a|u]y"
 PRICE_VALID_PERCENT = 10
 USE_FAST_BOOK = True
 SignalTyple = namedtuple(
-    'Signal', 'symbol_search signal_search is_buy sl_search tp_search')
+    'Signal', 'symbol_search price is_buy sl tps')
 
 
 def validate_order(order: dict, next_value: classes.Decimal):
@@ -186,8 +186,23 @@ def message_to_signal(text, symbol_regex):
     sl_search = re.search(SL_REGEX, text, flags=re.MULTILINE)
     is_buy = re.search(BUY_REGEX, text) != None
 
-    res = SignalTyple(symbol_search, signal_search,
-                      is_buy, sl_search, tp_search)
+    price = get_price(signal_search)
+    sl = get_sl(sl_search)
+    price = get_price(signal_search)
+    tps = get_tps(tp_search, is_buy)
+
+    tp_len = len(tps)
+    # They can mess up buy and sell words, so we try to fix this by guessing on the price, tp and sl
+    if price is None:
+        if sl is not None and tp_len > 0:
+            is_buy = tps[0] > sl
+    else:
+        if sl is not None:
+            is_buy = price > sl
+        elif tp_len > 0:
+            is_buy = price < tps[0]
+
+    res = SignalTyple(symbol_search, price, is_buy, sl, tps)
     return res
 
 
@@ -250,7 +265,7 @@ def string_to_orders(
     if text is None:
         text = ""
 
-    symbol_search, signal_search, is_buy, sl_search, tp_search = message_to_signal(
+    symbol_search, price, is_buy, sl, tps = message_to_signal(
         text, symbol_regex)
 
     breakeven_search = re.search(BREAKEVEN_REGEX, text)
@@ -259,11 +274,11 @@ def string_to_orders(
     sl_hit_search = re.search(SL_HIT_REGEX, text)
 
     has_target_orders = target_orders is not None and len(target_orders) > 0
-    is_signal = signal_search is not None
-    is_sl = sl_search is not None
+    is_signal = price is not None
+    is_sl = sl is not None
     is_tp_hit = tp_hit_search is not None
     is_sl_hit = sl_hit_search is not None
-    is_tp = tp_search is not None and len(tp_search) > 0
+    is_tp = tps is not None and len(tps) > 0
     # If we hit TP (1), we move sl to breakeven too.
     is_breakeven = breakeven_search is not None or is_tp_hit
     is_close = close_search is not None and breakeven_search is None
@@ -282,33 +297,20 @@ def string_to_orders(
         return None
 
     if is_signal:
-        # We want to parse signals with price only.
-        price_dec = get_price(signal_search)
-        if price_dec is None:
-            logging.debug(
-                "Cannot get price from signal, ignore it. Message text: %s", text)
-            return None
-
         order = {}
         order["id"] = id_
         order["is_buy"] = is_buy
         order["datetime"] = next_date
         order["price_actual"] = next_value
-        order["price_signal"] = price_dec
+        order["price_signal"] = price
         order["is_open"] = True
 
         if is_sl:
-            sl_dec = get_sl(sl_search)
-            if sl_dec is None:
-                logging.debug(
-                    "Cannot get stoploss from signal, ignore it. Message text: %s", text)
-                return None
-            order["stop_loss"] = sl_dec
+            order["stop_loss"] = sl
 
         if is_tp:
-            tp_list = get_tps(tp_search, is_buy)
             take_profit_index = 0
-            for tp_dec in tp_list:
+            for tp_dec in tps:
                 take_profit_index += 1
                 if take_profit_index == 1:
                     order["take_profit"] = tp_dec
@@ -338,18 +340,11 @@ def string_to_orders(
     for target_order in target_orders:
         target_order["update_date"] = date
         if is_sl:
-            sl_dec = helper.str_to_decimal(sl_search.group(1))
-            if sl_dec is None:
-                logging.debug(
-                    "Cannot get stoploss from signal, ignore it. Message text: %s", text)
-                return None
-            target_order["stop_loss"] = sl_dec
+            target_order["stop_loss"] = sl
 
         if is_tp and not is_tp_hit:
-            tp_single = tp_search[0]
-            tp_dec: classes.Decimal = helper.str_to_decimal(tp_single)
-            if tp_dec is not None:
-                target_order["take_profit"] = tp_dec
+            tp_single = tps[0]
+            target_order["take_profit"] = tp_single
 
         is_close_local = is_close
         if is_breakeven and target_order.get("has_breakeven") is None:
