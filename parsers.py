@@ -37,8 +37,8 @@ investing_symbol_api_mapping = {
     classes.Symbol.USDCHF: f"{BASE_URL_INVESTING}&symbol=4",
     classes.Symbol.USDJPY: f"{BASE_URL_INVESTING}&symbol=3",
     classes.Symbol.USDRUB: f"{BASE_URL_INVESTING}&symbol=2186",
-    classes.Symbol.XAGUSD: f"{BASE_URL_INVESTING}&symbol=8836",
-    classes.Symbol.XAUUSD: f"{BASE_URL_INVESTING}&symbol=8830"}
+    classes.Symbol.XAGUSD: f"{BASE_URL_INVESTING}&symbol=69",
+    classes.Symbol.XAUUSD: f"{BASE_URL_INVESTING}&symbol=68"}
 
 
 def get_lag_mins(symbol_last_datetime):

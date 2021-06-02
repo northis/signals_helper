@@ -3,6 +3,7 @@ import decimal
 import fileinput
 import sqlite3
 import os
+import classes
 
 from dotenv import load_dotenv
 
@@ -150,11 +151,13 @@ def import_json(input_file):
 
 def import_all_example():
     print("Importing...")
-    # import_csv(classes.Symbol.AUDUSD, r"E:\latest\AUDUSD_202103121800_202103172342.csv")
+    # import_csv(classes.Symbol.XAUUSD,
+    #            r"E:\XAUUSD_202101040102_202104272037.csv", helper.str_to_utc_datetime("2021-01-02T00:00:00+00:00"))
     print("Done")
 
 
 if __name__ == "__main__":
+    # import_all_example()
     print("Telegram history json import and conversion")
     print("Enter input file path")
     input_file = input()

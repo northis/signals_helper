@@ -9,7 +9,6 @@ import helper
 import parsers
 
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
-DT_INPUT_TIMEZONE = "EET"
 
 poll_event = threading.Event()
 POLL_INTERVAL_SEC = 4 * 60 * 60
