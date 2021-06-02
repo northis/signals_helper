@@ -16,7 +16,7 @@ symbols_regex_map[classes.Symbol.BTCUSD] = "(btc[\s\\\/-]*usd[t]?)"
 
 SIGNAL_REGEX = r"(b[a|u]y|sel[l]?)[\D]*([0-9]{1,8}[.,;:\s]?[0-9]{0,5})"
 TP_REGEX = r"t(ake\s)?p(rofit)?[\D]*([1-5]?)([\D])*([0-9]{1,8}[.,:\s]?[0-9]{0,5})$"
-SL_REGEX = r"s(top\s)?l(oss)?[\D]*([0-9]{1,8}[.,;:\s]?[0-9]{0,5}?)"
+SL_REGEX = r"s(top\s)?[l|t](oss)?[\D]*([0-9]{1,8}[.,;:\s]?[0-9]{0,5}?)"
 # PRICE_REGEX = r"([0-9]{4}\.?[0-9]{0,2})"
 BREAKEVEN_REGEX = r"(book)|(entry point)|(breakeven)"
 SL_HIT_REGEX = r"(sl|stop[\s]?los[s]?)(.)*hit"
