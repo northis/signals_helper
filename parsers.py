@@ -5,18 +5,12 @@ import helper
 import classes
 import config
 from helper import get_array_item_contains_key
-from pyquery import PyQuery
-import forwarder
-import re
-
 
 POLL_INPUT_FORMAT = r"%Y-%m-%d %H:%M:%S"
 # BASE_URL = f"https://www.alphavantage.co/query?&interval=1min&apikey={config.API_KEY}"
 BASE_URL_INVESTING = f"https://tvc4.forexpros.com/{config.API_KEY_INVESTING}/0/0/0/0/history?resolution=1"
 # FX_URL = f"{BASE_URL}&function=FX_INTRADAY"
 # CRYPTO_URL = f"https://api-pub.bitfinex.com/v2/candles/trade:1m:"
-TELEMETR_BASE_URL = "https://telemetr.io/post-list-ajax"
-
 investing_chrome_headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36",
 }
@@ -29,12 +23,6 @@ crypto_symbol_api_mapping = {
     # classes.Symbol.BTCUSD: f"{CRYPTO_URL}tBTCUSD/hist"
 }
 API_EXTENDED_POLL_THRESHOLD_MIN = 90
-
-
-def get_telemetr_url(channel_id, offset, type_query="deleted"):
-    # type_query="deleted|all"
-    telemetr_url = f"{TELEMETR_BASE_URL}/{channel_id}?sort=-date&postType={type_query}&before={offset}&period=365"
-    return telemetr_url
 
 
 investing_symbol_api_mapping = {
@@ -132,46 +120,3 @@ def parse_investing(symbol, symbol_last_datetime):
 
         i += 1
         yield (utc_date, open_, high, low, close)
-
-
-def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
-    messages = list()
-    for offset in range(start, max_offset, step):
-        url = get_telemetr_url(channel_id, offset)
-        html = requests.get(url).text
-        tags = PyQuery(html)('div[id^="post-"]')
-        for tag in tags:
-            try:
-                msg_datetime = PyQuery(tag)("a.date-link time[datetime]")
-                if len(msg_datetime) != 1:
-                    continue
-
-                msg_datetime = msg_datetime[0].attrib["datetime"]
-                views = int(PyQuery(tag)("div.views").text())
-
-                if views < 10:  # We treat this like a mistake and don't take in account such messages
-                    continue
-
-                id_ = int(tag.attrib["id"].replace("post-", ""))
-                # is_deleted = len(PyQuery(tag)("div.post-deleted-block")) > 0
-                text = PyQuery(tag)("div.post-block__content_message").text()
-                message_links = re.findall(
-                    forwarder.LINKS_REGEX, text, re.IGNORECASE)
-
-                if len(message_links) > 0:
-                    continue
-
-            except Exception as ex:
-                print(f"Cannot parse {tag}, error {ex}")
-                continue
-            tag_dict = {"date": msg_datetime,
-                        "id": id_, "text": text, "views": views}
-            messages.append(tag_dict)
-    return messages
-
-
-if __name__ == "__main__":
-
-    channel_id_local = 1434334125
-    history_data = telemetr_parse_history(channel_id_local, 6132, 5032)
-    config.set_json(f"E:/{channel_id_local}.json", history_data)

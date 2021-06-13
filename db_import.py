@@ -3,7 +3,10 @@ import decimal
 import fileinput
 import sqlite3
 import os
-import classes
+import re
+import requests
+import forwarder
+from pyquery import PyQuery
 
 from dotenv import load_dotenv
 
@@ -14,6 +17,7 @@ load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 DT_INPUT_TIMEZONE = "EET"
 COMMIT_BATCH_ROW_COUNT = 1000000
+TELEMETR_BASE_URL = "https://telemetr.io/post-list-ajax"
 
 
 def convert_history_json(file_in, timezone_local):
@@ -156,8 +160,55 @@ def import_all_example():
     print("Done")
 
 
+def get_telemetr_url(channel_id, offset, type_query="deleted"):
+    # type_query="deleted|all"
+    telemetr_url = f"{TELEMETR_BASE_URL}/{channel_id}?sort=-date&postType={type_query}&before={offset}&period=365"
+    return telemetr_url
+
+
+def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
+    messages = list()
+    for offset in range(start, max_offset, step):
+        url = get_telemetr_url(channel_id, offset)
+        html = requests.get(url).text
+        tags = PyQuery(html)('div[id^="post-"]')
+        for tag in tags:
+            try:
+                msg_datetime = PyQuery(tag)("a.date-link time[datetime]")
+                if len(msg_datetime) != 1:
+                    continue
+
+                msg_datetime = msg_datetime[0].attrib["datetime"]
+                views = int(PyQuery(tag)("div.views").text())
+
+                if views < 10:  # We treat this like a mistake and don't take in account such messages
+                    continue
+
+                id_ = int(tag.attrib["id"].replace("post-", ""))
+                # is_deleted = len(PyQuery(tag)("div.post-deleted-block")) > 0
+                text = PyQuery(tag)("div.post-block__content_message").text()
+                message_links = re.findall(
+                    forwarder.LINKS_REGEX, text, re.IGNORECASE)
+
+                if len(message_links) > 0:
+                    continue
+
+            except Exception as ex:
+                print(f"Cannot parse {tag}, error {ex}")
+                continue
+            tag_dict = {"date": msg_datetime,
+                        "id": id_, "text": text, "views": views}
+            messages.append(tag_dict)
+    return messages
+
+
 if __name__ == "__main__":
     # import_all_example()
+
+    # channel_id_local = 1434334125
+    # history_data = telemetr_parse_history(channel_id_local, 6132, 5032)
+    # config.set_json(f"E:/{channel_id_local}.json", history_data)
+
     print("Telegram history json import and conversion")
     print("Enter input file path")
     input_file = input()
