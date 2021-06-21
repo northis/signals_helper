@@ -19,8 +19,8 @@ import signal_parser
 STATS_COLLECT_SEC = 1*60*60  # 1 hour
 STATS_COLLECT_LOOP_GAP_SEC = 1*60  # 1 minute
 STATS_ANALYZE_LOOP_GAP_SEC = 10
-RESET_HISTORY_BATCH = 10
-RESET_HISTORY_DEEP_DAYS = 30
+RESET_HISTORY_BATCH = 1
+RESET_HISTORY_DEEP_DAYS = 60
 lock = threading.Lock()
 lock_increment = threading.Lock()
 
@@ -74,7 +74,7 @@ async def process_history():
                           ex, traceback.format_exc())
         WAIT_EVENT_OUTER.clear()
         WAIT_EVENT_OUTER.wait(STATS_COLLECT_SEC)
-        reset_random_channels()
+        # reset_random_channels()
     print("Closing processes...")
     WAIT_EVENT_INNER.set()
     pool.close()
