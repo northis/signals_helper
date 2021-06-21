@@ -14,7 +14,7 @@ symbols_regex_map[classes.Symbol.BTCUSD] = "(btc[\s\\\/-]*usd[t]?)"
 
 
 SIGNAL_REGEX = r"(b[a|u]y|sel[l]?)[\D]*([0-9]{1,8}[.,;:\s]?[0-9]{0,5})"
-TP_REGEX = r"t(ake\s)?p(rofit)?[\D]*([1-5]?)([\D])*([0-9]{1,8}[.,:\s]?[0-9]{0,5})$"
+TP_REGEX = r"t(ake\s)?p(rofit)?[\D]*([1-5]?)([\D])*([0-9]{1,8}[.,:\s]?[0-9]{0,5})"
 SL_REGEX = r"s(top\s)?[l|t](oss)?[\D]*([0-9]{1,8}[.,;:\s]?[0-9]{0,5}?)"
 BREAKEVEN_REGEX = r"(book)|(entry point)|(breakeven)"
 SL_HIT_REGEX = r"(sl|stop[\s]?los[s]?)(.)*hit"
@@ -211,7 +211,8 @@ def get_tps(tp_search, is_buy):
     for tp_entry in tp_search:
 
         tp_str = tp_entry[4]
-        if tp_entry[3] == '':
+        tp_group_3 = tp_entry[3]
+        if tp_group_3 == '' or tp_group_3 is None:
             tp_str = f"{tp_entry[2]}{tp_str}"
 
         tp_dec: classes.Decimal = helper.str_to_decimal(tp_str)
