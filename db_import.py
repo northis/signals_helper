@@ -15,6 +15,7 @@ import helper
 
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
+POST_ID_REGEX = r"posts\/(\d+)"
 DT_INPUT_TIMEZONE = "EET"
 COMMIT_BATCH_ROW_COUNT = 1000000
 TELEMETR_BASE_URL = "https://telemetr.io/post-list-ajax"
@@ -160,9 +161,9 @@ def import_all_example():
     print("Done")
 
 
-def get_telemetr_url(channel_id, offset, type_query="deleted"):
+def get_telemetr_url(channel_id, offset, type_query="all"):
     # type_query="deleted|all"
-    telemetr_url = f"{TELEMETR_BASE_URL}/{channel_id}?sort=-date&postType={type_query}&before={offset}&period=365"
+    telemetr_url = f"{TELEMETR_BASE_URL}/{channel_id}?sort=date&postType={type_query}&before={offset}&period=365"
     return telemetr_url
 
 
@@ -171,6 +172,10 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
     for offset in range(start, max_offset, step):
         url = get_telemetr_url(channel_id, offset)
         html = requests.get(url).text
+        if html is None or html is "":
+            continue
+
+        print(f"Offset: {offset}")
         tags = PyQuery(html)('div[id^="post-"]')
         for tag in tags:
             try:
@@ -184,7 +189,12 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
                 if views < 10:  # We treat this like a mistake and don't take in account such messages
                     continue
 
-                id_ = int(tag.attrib["id"].replace("post-", ""))
+                onclick_value = PyQuery(tag)("div.post-link-icon-btn")[0].attrib["onclick"]
+                id_search = re.search(POST_ID_REGEX, onclick_value)
+                if id_search is None:
+                    continue            
+
+                id_ =  int(id_search.groups(1)[0])
                 # is_deleted = len(PyQuery(tag)("div.post-deleted-block")) > 0
                 text = PyQuery(tag)("div.post-block__content_message").text()
                 message_links = re.findall(
@@ -203,11 +213,13 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
 
 
 if __name__ == "__main__":
-    # import_all_example()
+    import_all_example()
 
-    # channel_id_local = 1434334125
-    # history_data = telemetr_parse_history(channel_id_local, 6132, 5032)
-    # config.set_json(f"E:/{channel_id_local}.json", history_data)
+    # channel_id_local = 1472596871
+    # history_data = telemetr_parse_history(channel_id_local, 20000, 0, 1000)
+    # sorted_data = sorted(history_data, key=lambda x: x["id"], reverse=False)
+    
+    # config.set_json(f"E:/history/{channel_id_local}.json", sorted_data)
 
     print("Telegram history json import and conversion")
     print("Enter input file path")

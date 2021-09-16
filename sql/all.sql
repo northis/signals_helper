@@ -18,7 +18,6 @@ from (select CASE IsBuy WHEN 0 THEN o.PriceActual - o.ClosePrice  ELSE 				o.Clo
 on o.IdChannel = c.Id
     where ErrorState is NULL and CloseDate is not NULL and Symbol = 'XAUUSD' and abs
 (o.PriceActual - o.PriceSignal)<20) group by IdChannel 
-having last_date > '2021-06-01' and amount >20
+having last_date > '2021-06-01' and amount >10
 order by avg_diff desc
-
 
