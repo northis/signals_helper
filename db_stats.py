@@ -102,6 +102,7 @@ def analyze_channel(channel_id):
 
     if messages is None or len(messages) < 1:
         logging.info('analyze_channel: no data from %s', out_path)
+        return
 
     ordered_messges = sorted(messages, key=lambda x: x["id"], reverse=False)
 

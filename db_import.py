@@ -6,6 +6,7 @@ import os
 import re
 import requests
 import forwarder
+import classes
 from pyquery import PyQuery
 
 from dotenv import load_dotenv
@@ -172,7 +173,7 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
     for offset in range(start, max_offset, step):
         url = get_telemetr_url(channel_id, offset)
         html = requests.get(url).text
-        if html is None or html is "":
+        if html is None or html == "":
             continue
 
         print(f"Offset: {offset}")
@@ -184,7 +185,7 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
                     continue
 
                 msg_datetime = msg_datetime[0].attrib["datetime"]
-                views = int(PyQuery(tag)("div.views").text())
+                views = int(PyQuery(tag)("div.views").text().replace(" ",""))
 
                 if views < 10:  # We treat this like a mistake and don't take in account such messages
                     continue
@@ -194,7 +195,7 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
                 if id_search is None:
                     continue            
 
-                id_ =  int(id_search.groups(1)[0])
+                id_ =  int(id_search.groups(1)[0].replace(" ",""))
                 # is_deleted = len(PyQuery(tag)("div.post-deleted-block")) > 0
                 text = PyQuery(tag)("div.post-block__content_message").text()
                 message_links = re.findall(
@@ -214,12 +215,40 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
 
 if __name__ == "__main__":
     import_all_example()
-
-    # channel_id_local = 1472596871
-    # history_data = telemetr_parse_history(channel_id_local, 20000, 0, 1000)
-    # sorted_data = sorted(history_data, key=lambda x: x["id"], reverse=False)
     
-    # config.set_json(f"E:/history/{channel_id_local}.json", sorted_data)
+    exec_string = f"SELECT Id FROM Channel Where Id<> {config.PINNED_EXCEPT_CHANNEL_ID}"
+    channels_ids = None
+    # with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
+    #     channels_ids = cur.execute(exec_string).fetchall()
+
+    # for channel_id in channels_ids:
+    #     channel_id = channel_id[0]
+    #     history_data = telemetr_parse_history(channel_id, 30000, 0, 1000)
+    #     sorted_data = sorted(history_data, key=lambda x: x["id"], reverse=False)   
+    #     config.set_json(f"E:/history/{channel_id}.json", sorted_data)
+
+    # E:\history_new
+    main_folder = "E:/history"
+    main_folder_new = "E:/history_new"
+    files = os.listdir(main_folder)
+    for file_item in files:
+        file_item_path = os.path.join(main_folder, file_item)
+        file_item_new_path = os.path.join(main_folder_new, file_item)
+        json_file = config.get_json(file_item_path)
+        distinct_dict = dict()
+        distinct_list = list()
+        for json_item in json_file:
+            id_ = json_item["id"]
+            if id_ in distinct_dict:
+                continue
+
+            date_ = json_item["date"].replace("+00:00","").replace("Z","")
+            date_string = helper.str_to_utc_iso_datetime(date_,"UTC", config.ISO_DATE_IMPORT_FORMAT)
+            json_item["date"] = date_string
+            distinct_dict[id_] = json_item
+            distinct_list.append(json_item)
+
+        config.set_json(file_item_new_path, distinct_list)
 
     print("Telegram history json import and conversion")
     print("Enter input file path")
