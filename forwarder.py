@@ -208,10 +208,9 @@ async def join_link(url, client):
 
     try:
         if channel_id is not None:
-            get_in = await get_in_channel(channel_id, client)
-            if get_in is not None:
-                db_stats.upsert_channel(get_in.id, url, get_in.title)
-                return None
+            db_stats.upsert_channel(channel_id, url, None)
+            logging.info('Updated channel (id: %s) with code %s',channel_id, invite_code)
+            return None
 
         if is_public:
             result = await client(JoinChannelRequest(invite_code))
@@ -349,6 +348,7 @@ async def main_edit_message(to_primary_id, client, event):
     db_stats.delete_primary_message_id(id_message, id_channel)
     db_stats.set_primary_message_id(
         message_sent.id, id_message, id_channel)
+    logging.info('Edit message with id %s (channel id is %s) is ok', id_message, id_channel)
 
 
 async def main_forward_message(to_primary_id, to_secondary_id, client, event):
