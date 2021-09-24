@@ -208,8 +208,8 @@ async def join_link(url, client):
 
     try:
         if channel_id is not None:
-            db_stats.upsert_channel(channel_id, url, None)
-            logging.info('Updated channel (id: %s) with code %s',channel_id, invite_code)
+            db_stats.upsert_channel(channel_id[0], url, None)
+            logging.info('Updated channel (id: %s) with code %s',channel_id[0], invite_code)
             return None
 
         if is_public:
