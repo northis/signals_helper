@@ -373,12 +373,16 @@ def upsert_channel(id_, access_url, title):
         exec_string = f"SELECT Name, AccessLink, CreateDate, UpdateDate, HistoryLoaded, HistoryUpdateDate, HistoryAnalyzed, HistoryAnalysisUpdateDate FROM Channel WHERE Id = {id_}"
 
         result = cur.execute(exec_string)
-        title_safe = get_db_safe_title(title)
         now_str = helper.get_now_utc_iso()
         select_channel = result.fetchone()
 
         if access_url is None and title is None:
             return select_channel
+
+        if title is None:
+            title = select_channel[0]
+
+        title_safe = get_db_safe_title(title)
 
         if select_channel is None:
             insert_string = f"INSERT INTO Channel VALUES ({id_},'{title_safe}','{access_url}','{now_str}', NULL, NULL, NULL, NULL, NULL) ON CONFLICT(Id) DO UPDATE SET UpdateDate=excluded.UpdateDate, Name = excluded.Name"

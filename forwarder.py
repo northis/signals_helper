@@ -208,9 +208,12 @@ async def join_link(url, client):
 
     try:
         if channel_id is not None:
-            db_stats.upsert_channel(channel_id[0], url, None)
-            logging.info('Updated channel (id: %s) with code %s',channel_id[0], invite_code)
-            return None
+            upserted_channel = db_stats.upsert_channel(channel_id[0], url, None)
+            logging.info('Updated channel (id: %s) with code %s', channel_id[0], invite_code)
+
+            if upserted_channel is not None and upserted_channel[7] == 1:
+                logging.info('Skip joining, already analyzed channel, id: %s', channel_id[0])
+                return None
 
         if is_public:
             result = await client(JoinChannelRequest(invite_code))
