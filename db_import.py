@@ -216,8 +216,8 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
 if __name__ == "__main__":
     import_all_example()
     
-    exec_string = f"SELECT Id FROM Channel Where Id<> {config.PINNED_EXCEPT_CHANNEL_ID}"
-    channels_ids = None
+    # exec_string = f"SELECT Id FROM Channel Where Id<> {config.PINNED_EXCEPT_CHANNEL_ID}"
+    # channels_ids = None
     # with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
     #     channels_ids = cur.execute(exec_string).fetchall()
 
@@ -228,27 +228,27 @@ if __name__ == "__main__":
     #     config.set_json(f"E:/history/{channel_id}.json", sorted_data)
 
     # E:\history_new
-    main_folder = "E:/history"
-    main_folder_new = "E:/history_new"
-    files = os.listdir(main_folder)
-    for file_item in files:
-        file_item_path = os.path.join(main_folder, file_item)
-        file_item_new_path = os.path.join(main_folder_new, file_item)
-        json_file = config.get_json(file_item_path)
-        distinct_dict = dict()
-        distinct_list = list()
-        for json_item in json_file:
-            id_ = json_item["id"]
-            if id_ in distinct_dict:
-                continue
+    # main_folder = "E:/history"
+    # main_folder_new = "E:/history_new"
+    # files = os.listdir(main_folder)
+    # for file_item in files:
+    #     file_item_path = os.path.join(main_folder, file_item)
+    #     file_item_new_path = os.path.join(main_folder_new, file_item)
+    #     json_file = config.get_json(file_item_path)
+    #     distinct_dict = dict()
+    #     distinct_list = list()
+    #     for json_item in json_file:
+    #         id_ = json_item["id"]
+    #         if id_ in distinct_dict:
+    #             continue
 
-            date_ = json_item["date"].replace("+00:00","").replace("Z","")
-            date_string = helper.str_to_utc_iso_datetime(date_,"UTC", config.ISO_DATE_IMPORT_FORMAT)
-            json_item["date"] = date_string
-            distinct_dict[id_] = json_item
-            distinct_list.append(json_item)
+    #         date_ = json_item["date"].replace("+00:00","").replace("Z","")
+    #         date_string = helper.str_to_utc_iso_datetime(date_,"UTC", config.ISO_DATE_IMPORT_FORMAT)
+    #         json_item["date"] = date_string
+    #         distinct_dict[id_] = json_item
+    #         distinct_list.append(json_item)
 
-        config.set_json(file_item_new_path, distinct_list)
+    #     config.set_json(file_item_new_path, distinct_list)
 
     print("Telegram history json import and conversion")
     print("Enter input file path")

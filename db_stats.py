@@ -88,6 +88,7 @@ def reset_random_channels():
 
 
 def analyze_channel(channel_id):
+    logging.info('analyze_channel, channel id: %s', channel_id)
     out_path = os.path.join(config.CHANNELS_HISTORY_DIR, f"{channel_id}.json")
     messages = None
     try:
@@ -198,6 +199,7 @@ def write_db(input_typle):
 
 
 def analyze_history():
+    logging.info('analyze_history')
     # gold like one of
     min_date = db_poll.db_time_ranges[classes.Symbol.XAUUSD][0]
 
@@ -220,6 +222,7 @@ def analyze_history():
 
 
 async def download_history():
+    logging.info('download_history')
     exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded IS NULL OR HistoryLoaded <> 1"
     channels = None
 
@@ -336,7 +339,7 @@ def is_history_loaded(channel_id, url, title):
     if upsert_channel is None or upsert_res is None:
         return False
 
-    got_history = upsert_res[5] is not None
+    got_history = upsert_res[5] == 1
     return got_history
 
 
