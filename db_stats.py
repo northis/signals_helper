@@ -339,7 +339,7 @@ def is_history_loaded(channel_id, url, title):
     if upsert_channel is None or upsert_res is None:
         return False
 
-    got_history = upsert_res[5] == 1 or upsert_res[5] == "1"
+    got_history = upsert_res[5] == 1
     return got_history
 
 
@@ -373,7 +373,7 @@ def get_channel(access_url, title):
 
 def upsert_channel(id_, access_url, title):
     with classes.SQLite(config.DB_STATS_PATH, 'upsert_channel, db:', lock) as cur:
-        exec_string = f"SELECT Name, AccessLink, CreateDate, UpdateDate, HistoryLoaded, HistoryUpdateDate, HistoryAnalyzed, HistoryAnalysisUpdateDate FROM Channel WHERE Id = {id_}"
+        exec_string = f"SELECT Id, Name, AccessLink, CreateDate, UpdateDate, HistoryLoaded, HistoryUpdateDate, HistoryAnalyzed, HistoryAnalysisUpdateDate FROM Channel WHERE Id = {id_}"
 
         result = cur.execute(exec_string)
         now_str = helper.get_now_utc_iso()
@@ -392,7 +392,7 @@ def upsert_channel(id_, access_url, title):
             cur.execute(insert_string)
             return (id_, title_safe, access_url, now_str, None, None, None, None, None)
 
-        (name, link, create_date, update_date,
+        (id_, name, link, create_date, update_date,
             history_loaded, history_update_date,
             history_analyzed, history_analysis_update_date) = select_channel
 
