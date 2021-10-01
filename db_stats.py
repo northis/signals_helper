@@ -339,7 +339,7 @@ def is_history_loaded(channel_id, url, title):
     if upsert_channel is None or upsert_res is None:
         return False
 
-    got_history = upsert_res[5] == 1
+    got_history = upsert_res[5] == 1 or upsert_res[5] == "1"
     return got_history
 
 
