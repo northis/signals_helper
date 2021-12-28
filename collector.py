@@ -64,83 +64,81 @@ def should_wait(date_str):
     return False
 
 
-async def main_exec(stop_flag: classes.StopFlag):
-    
-    while True:
+async def main_exec(stop_flag: classes.StopFlag):    
+    async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:
+        while True:
+            try:
+                load_cfg()
+                if should_wait(config_collector["last_date"]):                
+                    while next_collect_date > datetime.datetime.utcnow() and not stop_flag.Value:
+                        await asyncio.sleep(stop_flag.Sleep)               
+                    if stop_flag.Value:
+                        return
+                await collect(stop_flag, client)
+            except Exception as ex:
+                logging.info('main_exec %s', ex)
+                await asyncio.sleep(5)
+        await client.disconnect()
+
+async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
+    total = last_id + length
+    for current_number in range(last_id+1, total, STEP):
+        if stop_flag.Value:
+            return
         try:
-            load_cfg()
-            if should_wait(config_collector["last_date"]):                
-                while next_collect_date > datetime.datetime.utcnow() and not stop_flag.Value:
-                    await asyncio.sleep(stop_flag.Sleep)               
-                if stop_flag.Value:
+            url = f"{main_url_part}{current_number}{url_tail}"
+            result = requests.get(url, headers=chrome_headers)
+            is_404 = result.status_code == 404
+
+            if is_404:
+                continue
+
+            if result.ok:
+                content = json.loads(result.text)
+                name = content['name']
+                published_at = content['published_at']
+                published_at_date = helper.str_to_utc_datetime(published_at, "UTC", ISO_DATE_FORMAT)
+                view_url = f"{view_url_part}{current_number}{url_tail}"
+                logging.info(f"video \"{name}\" ({published_at}) found: {view_url}")
+
+                has_video = True
+                out_file = f"{current_number}.mp4"
+                try:
+                    ydl_opts = {"outtmpl":out_file}
+                    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([view_url])
+                except Exception as ex:
+                    logging.info(f"on grab error: {ex}")
+                    has_video = False                        
+
+                text_msg = f"\"{name}\" - {published_at}"                    
+                for send_id in send_ids:
+                    if has_video:
+                        await client.send_file(send_id, out_file, caption=text_msg)
+                    else:
+                        await client.send_message(send_id, f"{text_msg}\n{view_url}")
+                
+                if has_video:
+                    os.remove(out_file)                        
+
+                to_save = dict()
+                to_save['id'] = current_number
+                to_save['published_at'] = published_at
+                to_save['name'] = content['name']
+                to_save['url'] = view_url
+                result_list.insert(0, to_save)
+                config.set_json(FILE_DB, result_list)
+                config_collector["last_id"] = current_number
+                config_collector["last_date"] = published_at
+                config.set_json(COLLECTOR_CONFIG, config_collector)
+                load_cfg()
+
+                if should_wait(published_at):
                     return
-            await collect(stop_flag)
+            else:
+                logging.info(f"resp_code: {result.status_code}, id: {current_number}, sleep for {ON_ERROR_SLEEP_SEC} sec")
+                time.sleep(ON_ERROR_SLEEP_SEC)
 
         except Exception as ex:
-            logging.info('main_exec %s', ex)
-            await asyncio.sleep(5)
-
-async def collect(stop_flag: classes.StopFlag):
-     async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:
-        total = last_id + length
-        for current_number in range(last_id+1, total, STEP):
-            if stop_flag.Value:
-                return
-            try:
-                url = f"{main_url_part}{current_number}{url_tail}"
-                result = requests.get(url, headers=chrome_headers)
-                is_404 = result.status_code == 404
-
-                if is_404:
-                    continue
-
-                if result.ok:
-                    content = json.loads(result.text)
-                    name = content['name']
-                    published_at = content['published_at']
-                    published_at_date = helper.str_to_utc_datetime(published_at, "UTC", ISO_DATE_FORMAT)
-                    view_url = f"{view_url_part}{current_number}{url_tail}"
-                    logging.info(f"video \"{name}\" ({published_at}) found: {view_url}")
-
-                    has_video = True
-                    out_file = f"{current_number}.mp4"
-                    try:
-                        ydl_opts = {"outtmpl":out_file}
-                        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                            ydl.download([view_url])
-                    except Exception as ex:
-                        logging.info(f"on grab error: {ex}")
-                        has_video = False                        
-
-                    text_msg = f"\"{name}\" - {published_at}"                    
-                    for send_id in send_ids:
-                        if has_video:
-                            await client.send_file(send_id, out_file, caption=text_msg)
-                        else:
-                            await client.send_message(send_id, f"{text_msg}\n{view_url}")
-                    
-                    if has_video:
-                        os.remove(out_file)                        
-
-                    to_save = dict()
-                    to_save['id'] = current_number
-                    to_save['published_at'] = published_at
-                    to_save['name'] = content['name']
-                    to_save['url'] = view_url
-                    result_list.insert(0, to_save)
-                    config.set_json(FILE_DB, result_list)
-                    config_collector["last_id"] = current_number
-                    config_collector["last_date"] = published_at
-                    config.set_json(COLLECTOR_CONFIG, config_collector)
-                    load_cfg()
-
-                    if should_wait(published_at):
-                        return
-                else:
-                    logging.info(f"resp_code: {result.status_code}, id: {current_number}, sleep for {ON_ERROR_SLEEP_SEC} sec")
-                    time.sleep(ON_ERROR_SLEEP_SEC)
-
-            except Exception as ex:
-                logging.info(f"collector error: {ex}")
-                time.sleep(ON_ERROR_SLEEP_SEC)  
-        await client.disconnect()     
+            logging.info(f"collector error: {ex}")
+            time.sleep(ON_ERROR_SLEEP_SEC)  
