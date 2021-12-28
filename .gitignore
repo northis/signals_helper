@@ -1,5 +1,7 @@
 .env
 config.json
+collector_db.json
+collector_config.json
 *.session
 __pycache__
 *.log
