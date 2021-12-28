@@ -102,15 +102,25 @@ async def collect(stop_flag: classes.StopFlag):
                     view_url = f"{view_url_part}{current_number}{url_tail}"
                     logging.info(f"video \"{name}\" ({published_at}) found: {view_url}")
 
+                    has_video = True
+                    out_file = f"{current_number}.mp4"
                     try:
-                        ydl_opts = {"outtmpl":f"{current_number}.%(ext)s"}
+                        ydl_opts = {"outtmpl":out_file}
                         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                             ydl.download([view_url])
                     except Exception as ex:
                         logging.info(f"on grab error: {ex}")
-                                        
-                    message_sent = await client.send_message(to_primary_id, "")
-                    await client.disconnect()
+                        has_video = False                        
+
+                    text_msg = f"\"{name}\" - {published_at}"                    
+                    for send_id in send_ids:
+                        if has_video:
+                            await client.send_file(send_id, out_file, caption=text_msg)
+                        else:
+                            await client.send_message(send_id, f"{text_msg}\n{view_url}")
+                    
+                    if has_video:
+                        os.remove(out_file)                        
 
                     to_save = dict()
                     to_save['id'] = current_number
@@ -124,7 +134,6 @@ async def collect(stop_flag: classes.StopFlag):
                     config.set_json(COLLECTOR_CONFIG, config_collector)
                     load_cfg()
 
-
                     if should_wait(published_at):
                         return
                 else:
@@ -133,4 +142,5 @@ async def collect(stop_flag: classes.StopFlag):
 
             except Exception as ex:
                 logging.info(f"collector error: {ex}")
-                time.sleep(ON_ERROR_SLEEP_SEC)       
+                time.sleep(ON_ERROR_SLEEP_SEC)  
+        await client.disconnect()     
