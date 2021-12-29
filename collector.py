@@ -58,8 +58,6 @@ def should_wait(date_str):
     last_date = helper.str_to_utc_datetime(date_str, "UTC", ISO_DATE_FORMAT)
     next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
     if next_collect_date > utc.localize(datetime.datetime.utcnow()):
-        wait_sec = delay_sec-delta_sec
-        logging.info('too close, wait for %s sec', wait_sec)
         return True
     return False
 
@@ -69,11 +67,13 @@ async def main_exec(stop_flag: classes.StopFlag):
         while True:
             try:
                 load_cfg()
-                if should_wait(config_collector["last_date"]):                
-                    while next_collect_date > datetime.datetime.utcnow() and not stop_flag.Value:
-                        await asyncio.sleep(stop_flag.Sleep)               
+                logging.info('collector - next iteration')
+                while should_wait(config_collector["last_date"]) and not stop_flag.Value:
+                    await asyncio.sleep(stop_flag.Sleep)               
                     if stop_flag.Value:
-                        return
+                        return              
+                
+                logging.info('going to collect')
                 await collect(stop_flag, client)
             except Exception as ex:
                 logging.info('main_exec %s', ex)
@@ -81,8 +81,16 @@ async def main_exec(stop_flag: classes.StopFlag):
         await client.disconnect()
 
 async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
-    total = last_id + length
-    for current_number in range(last_id+1, total, STEP):
+    total = last_id + 1 + length
+    log_total_every = total / 10
+    log_count = 0
+
+    for current_number in range(last_id + 1, total, STEP):
+        log_count = log_count + STEP
+        if log_count > log_total_every:
+            log_count = 0
+            logging.info(f'collecting... {current_number} from {total}')            
+
         if stop_flag.Value:
             return
         try:
@@ -114,7 +122,8 @@ async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
                 text_msg = f"\"{name}\" - {published_at}"                    
                 for send_id in send_ids:
                     if has_video:
-                        await client.send_file(send_id, out_file, caption=text_msg)
+                        await client.send_file(send_id, out_file)
+                        await client.send_message(send_id, f"{text_msg}\n{view_url}", silent=True)
                     else:
                         await client.send_message(send_id, f"{text_msg}\n{view_url}")
                 
