@@ -48,15 +48,15 @@ if __name__ == "__main__":
     parser.add_argument('-service', action='store_true')
     is_service = parser.parse_args().service
 
+    collector_forwarder = threading.Thread(target=collector_sync, daemon=True)
+    collector_forwarder.start()
+
     db_poll_thread = threading.Thread(target=db_poll.main_exec,
                                       args=[poll_event_sync], daemon=True)
     db_poll_thread.start()
 
     db_poll_forwarder = threading.Thread(target=forwarder_sync, daemon=True)
     db_poll_forwarder.start()
-
-    collector_forwarder = threading.Thread(target=collector_sync, daemon=True)
-    collector_forwarder.start()
 
     db_stats.WAIT_EVENT_OUTER = poll_event_sync
     history_downloader = threading.Thread(
