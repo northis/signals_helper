@@ -39,7 +39,7 @@ async def collector_event():
     await collector.main_exec(stop_flag)
 
 def collector_sync():
-    asyncio.run(collector_event(client))
+    asyncio.run(collector_event())
 
 
 if __name__ == "__main__":
