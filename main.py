@@ -17,8 +17,8 @@ poll_event_sync = threading.Event()
 stop_flag = classes.StopFlag()
 stop_event = Event()
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    filename='main.log',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(thread)d - %(threadName)s - %(levelname)s - %(message)s',
+                    filename='default.log',
                     encoding='utf-8',
                     level=logging.INFO)
 
