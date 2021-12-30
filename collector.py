@@ -62,23 +62,21 @@ def should_wait(date_str):
     return False
 
 
-async def main_exec(stop_flag: classes.StopFlag):    
-    async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:
-        while True:
-            try:
-                load_cfg()
-                logging.info('collector - next iteration')
-                while should_wait(config_collector["last_date"]) and not stop_flag.Value:
-                    await asyncio.sleep(stop_flag.Sleep)               
-                    if stop_flag.Value:
-                        return              
-                
-                logging.info('going to collect')
-                await collect(stop_flag, client)
-            except Exception as ex:
-                logging.info('main_exec %s', ex)
-                await asyncio.sleep(5)
-        await client.disconnect()
+async def main_exec(stop_flag: classes.StopFlag, client: TelegramClient):    
+    while True:
+        try:
+            load_cfg()
+            logging.info('collector - next iteration')
+            while should_wait(config_collector["last_date"]) and not stop_flag.Value:
+                await asyncio.sleep(stop_flag.Sleep)               
+                if stop_flag.Value:
+                    return              
+            
+            logging.info('going to collect')
+            await collect(stop_flag, client)
+        except Exception as ex:
+            logging.info('main_exec %s', ex)
+            await asyncio.sleep(5)
 
 async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
     total = last_id + 1 + length

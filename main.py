@@ -10,11 +10,12 @@ import forwarder
 import db_stats
 import db_poll
 import collector
+from telethon import TelegramClient
+import config
 
 poll_event_sync = threading.Event()
 stop_flag = classes.StopFlag()
 stop_event = Event()
-
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     filename='main.log',
@@ -25,37 +26,38 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 def signal_handler():
     stop_event.set()
 
-
 signal.signal(signal.SIGINT, signal_handler)
 
+async def forwarder_event(client):
+    await forwarder.main_exec(stop_flag, client)
 
-async def forwarder_event():
-    await forwarder.main_exec(stop_flag)
 
-
-def forwarder_sync():
-    asyncio.run(forwarder_event())
+def forwarder_sync(client):
+    asyncio.run(forwarder_event(client))
     
-async def collector_event():
-    await collector.main_exec(stop_flag)
+async def collector_event(client):
+    await collector.main_exec(stop_flag, client)
 
-def collector_sync():
-    asyncio.run(collector_event())
+def collector_sync(client):
+    asyncio.run(collector_event(client))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-service', action='store_true')
     is_service = parser.parse_args().service
+    
+    client = TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash)
+    client.connect()
 
-    collector_forwarder = threading.Thread(target=collector_sync, daemon=True)
+    collector_forwarder = threading.Thread(target=collector_sync, args=[client], daemon=True)
     collector_forwarder.start()
 
     db_poll_thread = threading.Thread(target=db_poll.main_exec,
                                       args=[poll_event_sync], daemon=True)
     db_poll_thread.start()
 
-    db_poll_forwarder = threading.Thread(target=forwarder_sync, daemon=True)
+    db_poll_forwarder = threading.Thread(target=forwarder_sync, args=[client], daemon=True)
     db_poll_forwarder.start()
 
     db_stats.WAIT_EVENT_OUTER = poll_event_sync
@@ -76,3 +78,5 @@ if __name__ == "__main__":
     db_poll_forwarder.join()
     history_downloader.join()
     collector_forwarder.join()
+    
+    client.disconnect()
