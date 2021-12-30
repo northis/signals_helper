@@ -17,7 +17,7 @@ poll_event_sync = threading.Event()
 stop_flag = classes.StopFlag()
 stop_event = Event()
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(thread)d - %(threadName)s - %(levelname)s - %(message)s',
+logging.basicConfig(format='%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s',
                     filename='default.log',
                     encoding='utf-8',
                     level=logging.INFO)
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     is_service = parser.parse_args().service
     
     client = TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash)
-    client.connect()
+    client.run_until_disconnected()
 
     collector_forwarder = threading.Thread(target=collector_sync, args=[client], daemon=True)
     collector_forwarder.start()
