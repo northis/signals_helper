@@ -62,7 +62,7 @@ if __name__ == "__main__":
 
     db_stats.WAIT_EVENT_OUTER = poll_event_sync
     history_downloader = threading.Thread(
-        target=db_stats.main_exec, daemon=True)
+        target=db_stats.main_exec, args=[client], daemon=True)
     history_downloader.start()
 
     if is_service:

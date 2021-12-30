@@ -221,7 +221,7 @@ def analyze_history():
             return
 
 
-async def download_history():
+async def download_history(client: TelegramClient):
     logging.info('download_history')
     exec_string = "SELECT Id, AccessLink FROM Channel WHERE HistoryLoaded IS NULL OR HistoryLoaded <> 1"
     channels = None
@@ -229,57 +229,57 @@ async def download_history():
     with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
         channels = cur.execute(exec_string).fetchall()
 
-    async with TelegramClient(config.SESSION_FILE, config.api_id, config.api_hash) as client:
-        for channel_item in channels:
-            channel_id = channel_item[0]
-            channel = await forwarder.get_in_channel(channel_id, client)
-            channel_link = None
-            if channel is None:
-                channel_link = channel_item[1]
-                channel = await forwarder.join_link(channel_link, client)
-            if channel is None:
-                logging.info(
-                    'Channel id: %s, cannot join or already in', channel_id)
-                continue
+    
+    for channel_item in channels:
+        channel_id = channel_item[0]
+        channel = await forwarder.get_in_channel(channel_id, client)
+        channel_link = None
+        if channel is None:
+            channel_link = channel_item[1]
+            channel = await forwarder.join_link(channel_link, client)
+        if channel is None:
+            logging.info(
+                'Channel id: %s, cannot join or already in', channel_id)
+            continue
 
-            messages_list = list()
+        messages_list = list()
 
-            messages = await client.get_messages(channel, None)
-            for message in messages:
-                msg_dict = message.to_dict()
-                msg_props = dict()
-                msg_props["id"] = msg_dict["id"]
-                msg_props["date"] = helper.datetime_to_utc_datetime(
-                    msg_dict["date"]).isoformat()
+        messages = await client.get_messages(channel, None)
+        for message in messages:
+            msg_dict = message.to_dict()
+            msg_props = dict()
+            msg_props["id"] = msg_dict["id"]
+            msg_props["date"] = helper.datetime_to_utc_datetime(
+                msg_dict["date"]).isoformat()
 
-                message_item = msg_dict.get("message")
-                if message_item is not None:
-                    msg_props["text"] = message_item
+            message_item = msg_dict.get("message")
+            if message_item is not None:
+                msg_props["text"] = message_item
 
-                reply_to_message = msg_dict.get("reply_to")
-                if reply_to_message is not None:
-                    msg_props["reply_to_msg_id"] = reply_to_message["reply_to_msg_id"]
+            reply_to_message = msg_dict.get("reply_to")
+            if reply_to_message is not None:
+                msg_props["reply_to_msg_id"] = reply_to_message["reply_to_msg_id"]
 
-                messages_list.append(msg_props)
+            messages_list.append(msg_props)
 
-            out_path = os.path.join(
-                config.CHANNELS_HISTORY_DIR, f"{channel_id}.json")
-            config.set_json(out_path, messages_list)
-            now_str = helper.get_now_utc_iso()
+        out_path = os.path.join(
+            config.CHANNELS_HISTORY_DIR, f"{channel_id}.json")
+        config.set_json(out_path, messages_list)
+        now_str = helper.get_now_utc_iso()
 
-            update_string = f"UPDATE Channel SET HistoryLoaded = 1, HistoryUpdateDate = '{now_str}' WHERE Id={channel_id}"
+        update_string = f"UPDATE Channel SET HistoryLoaded = 1, HistoryUpdateDate = '{now_str}' WHERE Id={channel_id}"
 
-            with classes.SQLite(config.DB_STATS_PATH, 'download_history, db update:', lock) as cur:
-                channels = cur.execute(update_string)
+        with classes.SQLite(config.DB_STATS_PATH, 'download_history, db update:', lock) as cur:
+            channels = cur.execute(update_string)
 
-            if channel_link is not None:
-                await forwarder.exit_if_needed(channel_link, channel_id, client)
+        if channel_link is not None:
+            await forwarder.exit_if_needed(channel_link, channel_id, client)
 
-        if WAIT_EVENT_OUTER.is_set():
-            return
+    if WAIT_EVENT_OUTER.is_set():
+        return
 
-        WAIT_EVENT_OUTER.clear()
-        WAIT_EVENT_OUTER.wait(STATS_COLLECT_LOOP_GAP_SEC)
+    WAIT_EVENT_OUTER.clear()
+    WAIT_EVENT_OUTER.wait(STATS_COLLECT_LOOP_GAP_SEC)
 
 
 def main_exec():
