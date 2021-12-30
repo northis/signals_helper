@@ -55,7 +55,7 @@ def is_theads_busy():
     return res
 
 
-async def process_history():
+async def process_history(client: TelegramClient):
     global pool
     pool = Pool(MAX_WORKERS)
     await asyncio.sleep(5)  # wait for data
@@ -63,7 +63,7 @@ async def process_history():
         if WAIT_EVENT_OUTER.is_set():
             break
         try:
-            await download_history()
+            await download_history(client)
         except Exception as ex:
             logging.error('download_history: %s, error: %s',
                           ex, traceback.format_exc())
@@ -282,8 +282,8 @@ async def download_history(client: TelegramClient):
     WAIT_EVENT_OUTER.wait(STATS_COLLECT_LOOP_GAP_SEC)
 
 
-def main_exec():
-    asyncio.run(process_history())
+def main_exec(client: TelegramClient):
+    asyncio.run(process_history(client))
 
 
 def get_primary_message_id(id_message, id_channel):
