@@ -47,8 +47,9 @@ if __name__ == "__main__":
     parser.add_argument('-service', action='store_true')
     is_service = parser.parse_args().service
     
-    client = TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash)
-    client.run_until_disconnected()
+    loop = asyncio.new_event_loop()
+    client = TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash, loop=loop)
+    client.connect()
 
     collector_forwarder = threading.Thread(target=collector_sync, args=[client], daemon=True)
     collector_forwarder.start()
