@@ -38,25 +38,27 @@ def is_price_actual(symbol: classes.Symbol, price: float):
     return res
 
 
-async def main_exec(stop_flag: classes.StopFlag, client:TelegramClient):
-    while True:
-        try:
-            primary = None
-            dialogs = list(await client.get_dialogs())
-            for forward in forwards:
-                await init_forward(forward, client, dialogs)
-                if primary is None:
-                    primary = forward.get('to_primary')
+async def main_exec(stop_flag: classes.StopFlag):
+    async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:
+        while True:
+            try:
+                primary = None
+                dialogs = list(await client.get_dialogs())
+                for forward in forwards:
+                    await init_forward(forward, client, dialogs)
+                    if primary is None:
+                        primary = forward.get('to_primary')
 
-            primary_chat = await get_chat_by_id(client, int(primary["id"]))
-            await db_stats.set_pinned(client, forwards, primary_chat)
-            await bulk_exit(client)
-            await stop_flag.wait()
-            break
+                primary_chat = await get_chat_by_id(client, int(primary["id"]))
+                await db_stats.set_pinned(client, forwards, primary_chat)
+                await bulk_exit(client)
+                await stop_flag.wait()
+                await client.disconnect()
+                break
 
-        except Exception as ex:
-            logging.info('main_exec %s', ex)
-            await asyncio.sleep(5)
+            except Exception as ex:
+                logging.info('main_exec %s', ex)
+                await asyncio.sleep(5)
 
 
 async def get_chat_id_by_name(client, name):

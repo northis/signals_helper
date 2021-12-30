@@ -28,17 +28,17 @@ def signal_handler():
 
 signal.signal(signal.SIGINT, signal_handler)
 
-async def forwarder_event(client):
-    await forwarder.main_exec(stop_flag, client)
+async def forwarder_event():
+    await forwarder.main_exec(stop_flag)
 
 
-def forwarder_sync(client):
-    asyncio.run(forwarder_event(client))
+def forwarder_sync():
+    asyncio.run(forwarder_event())
     
-async def collector_event(client):
-    await collector.main_exec(stop_flag, client)
+async def collector_event():
+    await collector.main_exec(stop_flag)
 
-def collector_sync(client):
+def collector_sync():
     asyncio.run(collector_event(client))
 
 
@@ -47,23 +47,19 @@ if __name__ == "__main__":
     parser.add_argument('-service', action='store_true')
     is_service = parser.parse_args().service
     
-    loop = asyncio.new_event_loop()
-    client = TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash, loop=loop)
-    client.connect()
-
-    collector_forwarder = threading.Thread(target=collector_sync, args=[client], daemon=True)
+    collector_forwarder = threading.Thread(target=collector_sync, daemon=True)
     collector_forwarder.start()
 
     db_poll_thread = threading.Thread(target=db_poll.main_exec,
                                       args=[poll_event_sync], daemon=True)
     db_poll_thread.start()
 
-    db_poll_forwarder = threading.Thread(target=forwarder_sync, args=[client], daemon=True)
+    db_poll_forwarder = threading.Thread(target=forwarder_sync, daemon=True)
     db_poll_forwarder.start()
 
     db_stats.WAIT_EVENT_OUTER = poll_event_sync
     history_downloader = threading.Thread(
-        target=db_stats.main_exec, args=[client], daemon=True)
+        target=db_stats.main_exec, daemon=True)
     history_downloader.start()
 
     if is_service:
