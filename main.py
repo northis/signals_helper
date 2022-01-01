@@ -55,12 +55,12 @@ if __name__ == "__main__":
     db_poll_thread.start()
 
     db_poll_forwarder = threading.Thread(target=forwarder_sync, daemon=True)
-    #db_poll_forwarder.start()
+    db_poll_forwarder.start()
 
     db_stats.WAIT_EVENT_OUTER = poll_event_sync
     history_downloader = threading.Thread(
         target=db_stats.main_exec, daemon=True)
-    #history_downloader.start()
+    history_downloader.start()
 
     if is_service:
         stop_event.wait()
@@ -72,6 +72,6 @@ if __name__ == "__main__":
     stop_flag.Value = True
 
     db_poll_thread.join()
-    #db_poll_forwarder.join()
-    #history_downloader.join()
+    db_poll_forwarder.join()
+    history_downloader.join()
     collector_forwarder.join()
