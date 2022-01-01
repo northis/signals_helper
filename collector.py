@@ -19,6 +19,7 @@ utc=pytz.UTC
 COLLECTOR_CONFIG = "collector_config.json"
 load_dotenv()
 config_collector = config.get_json(COLLECTOR_CONFIG)
+SESSION = 'secure_session_history_collector.session'
 ON_ERROR_SLEEP_SEC = 60
 STEP = 1
 FILE_DB = "collector_db.json"
@@ -59,7 +60,7 @@ def should_wait(date_str):
     now = datetime.datetime.utcnow()
     next_collect_date = None
 
-    if now.weekday() == 6 or now.weekday() ==0:#weekend
+    if now.weekday() == 6 or now.weekday() == 0:#weekend
         return True
     else:
         last_date + datetime.timedelta(seconds=delay_sec)
@@ -70,7 +71,7 @@ def should_wait(date_str):
 
 
 async def main_exec(stop_flag: classes.StopFlag): 
-    async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:   
+    async with TelegramClient(SESSION, config.api_id, config.api_hash) as client:   
         while True:
             try:
                 load_cfg()

@@ -18,7 +18,7 @@ LINKS_REGEX = r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{
 INVITE_REGEX = r"joinchat\/(.+)"
 URL_REGEX = r"t.me\/(.+)"
 TRADINGVIEW_REGEX = r"tradingview.com\/(.+)"
-
+SESSION = 'secure_session_history_forwarder.session'
 load_dotenv()
 main_config = config.get_config()
 forwards = main_config['forwards']
@@ -39,7 +39,7 @@ def is_price_actual(symbol: classes.Symbol, price: float):
 
 
 async def main_exec(stop_flag: classes.StopFlag):
-    async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client:
+    async with TelegramClient(SESSION, config.api_id, config.api_hash) as client:
         while True:
             try:
                 primary = None

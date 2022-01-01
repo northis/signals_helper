@@ -23,6 +23,7 @@ RESET_HISTORY_BATCH = 1
 RESET_HISTORY_DEEP_DAYS = 30
 lock = threading.Lock()
 lock_increment = threading.Lock()
+SESSION = 'secure_session_history_stats.session'
 
 # if you have lots to analyze, but this can burn you cpu
 MAX_WORKERS = multiprocessing.cpu_count()
@@ -229,7 +230,7 @@ async def download_history():
     with classes.SQLite(config.DB_STATS_PATH, 'download_history, db:', None) as cur:
         channels = cur.execute(exec_string).fetchall()
     
-    async with TelegramClient(config.SESSION_HISTORY_FILE, config.api_id, config.api_hash) as client: 
+    async with TelegramClient(SESSION, config.api_id, config.api_hash) as client: 
         for channel_item in channels:
             channel_id = channel_item[0]
             channel = await forwarder.get_in_channel(channel_id, client)
