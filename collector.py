@@ -63,7 +63,7 @@ def should_wait(date_str):
     if now.weekday() == 6 or now.weekday() == 0:#weekend
         return True
     else:
-        last_date + datetime.timedelta(seconds=delay_sec)
+        next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
 
     if next_collect_date > utc.localize(now):
         return True
