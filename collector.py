@@ -56,8 +56,15 @@ def load_cfg():
 
 def should_wait(date_str):
     last_date = helper.str_to_utc_datetime(date_str, "UTC", ISO_DATE_FORMAT)
-    next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
-    if next_collect_date > utc.localize(datetime.datetime.utcnow()):
+    now = datetime.datetime.utcnow()
+    next_collect_date = None
+
+    if now.weekday() == 6 or now.weekday() ==0:#weekend
+        return True
+    else:
+        last_date + datetime.timedelta(seconds=delay_sec)
+
+    if next_collect_date > utc.localize(now):
         return True
     return False
 
