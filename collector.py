@@ -95,6 +95,7 @@ async def main_exec(stop_flag: classes.StopFlag):
                 
                 logging.info('going to collect')
                 await collect(stop_flag, client)
+
             except Exception as ex:
                 logging.info('main_exec %s', ex)
                 await asyncio.sleep(5)
