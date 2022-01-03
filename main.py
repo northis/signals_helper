@@ -17,24 +17,14 @@ poll_event_sync = threading.Event()
 stop_flag = classes.StopFlag()
 stop_event = Event()
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s',
-                    filename='default.log',
-                    encoding='utf-8',
-                    level=logging.INFO)
-logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-
-
-def set_logger():
-    logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-    rootLogger = logging.getLogger()
-
-    fileHandler = logging.FileHandler("{0}/{1}.log".format(logPath, fileName))
-    fileHandler.setFormatter(logFormatter)
-    rootLogger.addHandler(fileHandler)
-
-    consoleHandler = logging.StreamHandler()
-    consoleHandler.setFormatter(logFormatter)
-    rootLogger.addHandler(consoleHandler)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("default.log"),
+        logging.StreamHandler()
+    ]
+)
 
 def signal_handler():
     stop_event.set()

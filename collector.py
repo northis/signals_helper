@@ -99,6 +99,10 @@ async def main_exec(stop_flag: classes.StopFlag):
             except Exception as ex:
                 logging.info('main_exec %s', ex)
                 await asyncio.sleep(5)
+
+            for handler in logging.handlers:
+                handler.flush()
+
         await client.disconnect()
 
 async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
