@@ -72,10 +72,21 @@ def should_wait(date_str):
 
 
 async def main_exec(stop_flag: classes.StopFlag): 
-    async with TelegramClient(SESSION, config.api_id, config.api_hash) as client:   
+    async with TelegramClient(SESSION, config.api_id, config.api_hash) as client:
+        global got_collected
+        got_collected = False
+        no_collect_in_a_row_count = 0
         while True:
             try:
-                load_cfg()
+                load_cfg()                
+                if got_collected:
+                    got_collected = False
+                    no_collect_in_a_row_count = 0
+                elif no_collect_in_a_row_count > 0:
+                    length = length * (2 + no_collect_in_a_row_count)
+                    no_collect_in_a_row_count = no_collect_in_a_row_count + 1
+                    logging.info(f'cannot collect, extend the range to {length}')
+
                 logging.info('collector - next iteration')
                 while should_wait(config_collector["last_date"]) and not stop_flag.Value:
                     await asyncio.sleep(stop_flag.Sleep)               
@@ -149,6 +160,7 @@ async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
                 config_collector["last_id"] = current_number
                 config_collector["last_date"] = published_at
                 config.set_json(COLLECTOR_CONFIG, config_collector)
+                got_collected = True
                 load_cfg()
 
                 if should_wait(published_at):
