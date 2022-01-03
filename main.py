@@ -17,11 +17,17 @@ poll_event_sync = threading.Event()
 stop_flag = classes.StopFlag()
 stop_event = Event()
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s',
-                    filename='default.log',
-                    encoding='utf-8',
-                    level=logging.INFO)
+def set_logger():
+    logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+    rootLogger = logging.getLogger()
 
+    fileHandler = logging.FileHandler("{0}/{1}.log".format(logPath, fileName))
+    fileHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(fileHandler)
+
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
 
 def signal_handler():
     stop_event.set()
@@ -43,6 +49,7 @@ def collector_sync():
 
 
 if __name__ == "__main__":
+    set_logger()
     parser = argparse.ArgumentParser()
     parser.add_argument('-service', action='store_true')
     is_service = parser.parse_args().service

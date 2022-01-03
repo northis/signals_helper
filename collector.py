@@ -168,8 +168,8 @@ async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
                     return
             else:
                 logging.info(f"resp_code: {result.status_code}, id: {current_number}, sleep for {ON_ERROR_SLEEP_SEC} sec")
-                time.sleep(ON_ERROR_SLEEP_SEC)
+                await asyncio.sleep(ON_ERROR_SLEEP_SEC)
 
         except Exception as ex:
             logging.info(f"collector error: {ex}")
-            time.sleep(ON_ERROR_SLEEP_SEC)  
+            await asyncio.sleep(ON_ERROR_SLEEP_SEC)  
