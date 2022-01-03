@@ -75,3 +75,4 @@ if __name__ == "__main__":
     db_poll_forwarder.join()
     history_downloader.join()
     collector_forwarder.join()
+    logging.shutdown()
