@@ -72,40 +72,34 @@ def should_wait(date_str):
 
 
 async def main_exec(stop_flag: classes.StopFlag): 
-    async with TelegramClient(SESSION, config.api_id, config.api_hash) as client:
-        global got_collected
-        got_collected = False
-        no_collect_in_a_row_count = 0
-        while True:
-            try:
-                load_cfg()                
-                if got_collected:
-                    got_collected = False
-                    no_collect_in_a_row_count = 0
-                elif no_collect_in_a_row_count > 0:
-                    length = length * (2 + no_collect_in_a_row_count)
-                    no_collect_in_a_row_count = no_collect_in_a_row_count + 1
-                    logging.info(f'cannot collect, extend the range to {length}')
+    global got_collected
+    got_collected = False
+    no_collect_in_a_row_count = 0
+    while True:
+        try:
+            load_cfg()                
+            if got_collected:
+                got_collected = False
+                no_collect_in_a_row_count = 0
+            elif no_collect_in_a_row_count > 0:
+                length = length * (2 + no_collect_in_a_row_count)
+                no_collect_in_a_row_count = no_collect_in_a_row_count + 1
+                logging.info(f'cannot collect, extend the range to {length}')
 
-                logging.info('collector - next iteration')
-                while should_wait(config_collector["last_date"]) and not stop_flag.Value:
-                    await asyncio.sleep(stop_flag.Sleep)               
-                    if stop_flag.Value:
-                        return              
-                
-                logging.info('going to collect')
-                await collect(stop_flag, client)
+            logging.info('collector - next iteration')
+            while should_wait(config_collector["last_date"]) and not stop_flag.Value:
+                await asyncio.sleep(stop_flag.Sleep)               
+                if stop_flag.Value:
+                    return              
+            
+            logging.info('going to collect')
+            await collect(stop_flag)
 
-            except Exception as ex:
-                logging.info('main_exec %s', ex)
-                await asyncio.sleep(5)
+        except Exception as ex:
+            logging.info('main_exec %s', ex)
+            await asyncio.sleep(5)
 
-            for handler in logging.handlers:
-                handler.flush()
-
-        await client.disconnect()
-
-async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
+async def collect(stop_flag: classes.StopFlag):
     total = last_id + 1 + length
     log_every = length / 10
     log_count = 0
@@ -145,13 +139,15 @@ async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
                     logging.info(f"on grab error: {ex}")
                     has_video = False                        
 
-                text_msg = f"\"{name}\" - {published_at}"                    
-                for send_id in send_ids:
-                    if has_video:
-                        await client.send_file(send_id, out_file)
-                        await client.send_message(send_id, f"{text_msg}\n{view_url}", silent=True)
-                    else:
-                        await client.send_message(send_id, f"{text_msg}\n{view_url}")
+                text_msg = f"\"{name}\" - {published_at}"
+                
+                async with TelegramClient(SESSION, config.api_id, config.api_hash) as client:                    
+                    for send_id in send_ids:
+                        if has_video:
+                            await client.send_file(send_id, out_file)
+                            await client.send_message(send_id, f"{text_msg}\n{view_url}", silent=True)
+                        else:
+                            await client.send_message(send_id, f"{text_msg}\n{view_url}")
                 
                 if has_video:
                     os.remove(out_file)                        
