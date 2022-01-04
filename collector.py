@@ -107,14 +107,15 @@ async def main_exec(stop_flag: classes.StopFlag):
 
 async def collect(stop_flag: classes.StopFlag, client: TelegramClient):
     total = last_id + 1 + length
-    log_total_every = total / 10
+    log_every = length / 10
     log_count = 0
 
     for current_number in range(last_id + 1, total, STEP):
         log_count = log_count + STEP
-        if log_count > log_total_every:
+        if log_count > log_every:
             log_count = 0
-            logging.info(f'collecting... {current_number} from {total}')            
+            logging.info(f'collecting... {current_number} from {total}')
+            print(f'collecting... {current_number} from {total}')  
 
         if stop_flag.Value:
             return
