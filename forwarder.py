@@ -40,25 +40,26 @@ def is_price_actual(symbol: classes.Symbol, price: float):
 
 async def main_exec(stop_flag: classes.StopFlag):
     async with TelegramClient(SESSION, config.api_id, config.api_hash) as client:
-        while True:
-            try:
-                primary = None
-                dialogs = list(await client.get_dialogs())
-                for forward in forwards:
-                    await init_forward(forward, client, dialogs)
-                    if primary is None:
-                        primary = forward.get('to_primary')
+        try:
+            primary = None
+            dialogs = list(await client.get_dialogs())
+            for forward in forwards:
+                await init_forward(forward, client, dialogs)
+                if primary is None:
+                    primary = forward.get('to_primary')
 
-                primary_chat = await get_chat_by_id(client, int(primary["id"]))
-                await db_stats.set_pinned(client, forwards, primary_chat)
-                await bulk_exit(client)
-                await stop_flag.wait()
-                await client.disconnect()
-                break
+            primary_chat = await get_chat_by_id(client, int(primary["id"]))
+            await db_stats.set_pinned(client, forwards, primary_chat)
+            logging.info('Pinned is set')
+            await bulk_exit(client)
+            logging.info('Bulk exit is done')
+            await stop_flag.wait()
+            await client.disconnect()
+            logging.info('Disconnecting is done')
 
-            except Exception as ex:
-                logging.info('main_exec %s', ex)
-                await asyncio.sleep(5)
+        except Exception as ex:
+            logging.info('forwarder main_exec %s', ex)
+            await stop_flag.wait()
 
 
 async def get_chat_id_by_name(client, name):
@@ -91,9 +92,11 @@ def get_chat_by_id_list(id_, dialogs):
 
 
 async def init_forward(forward, client, dialogs: list):
+    
     from_chat_id = forward['from_chat_id']
     from_chat_title = forward['from_chat_title']
     to_primary = forward['to_primary']
+    logging.info(f'init_forward: {from_chat_id}')
 
     is_ready = False
 
@@ -479,6 +482,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
 
 
 def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
+    logging.info(f'forward_exec: chat: {from_chat_id}')
     @client.on(events.NewMessage(chats=(from_chat_id)))
     async def handler(event):
         await main_forward_message(to_primary_id, to_secondary_id, client, event)
