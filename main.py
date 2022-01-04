@@ -50,8 +50,8 @@ if __name__ == "__main__":
     parser.add_argument('-service', action='store_true')
     is_service = parser.parse_args().service
     
-    collector = threading.Thread(target=collector_sync, daemon=True)
-    collector.start()
+    collector_th = threading.Thread(target=collector_sync, daemon=True)
+    collector_th.start()
 
     db_poll_thread = threading.Thread(target=db_poll.main_exec,
                                       args=[poll_event_sync], daemon=True)
@@ -77,5 +77,5 @@ if __name__ == "__main__":
     db_poll_thread.join()
     db_poll_forwarder.join()
     history_downloader.join()
-    collector.join()
+    collector_th.join()
     logging.shutdown()
