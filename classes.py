@@ -44,7 +44,7 @@ class Symbol(str):
 
 class StopFlag:
     Value = False
-    Sleep = 10
+    Sleep = 1
 
     async def wait(self):
         while True:
