@@ -54,7 +54,6 @@ async def main_exec(stop_flag: classes.StopFlag):
             await bulk_exit(client)
             logging.info('Bulk exit is done')
             await stop_flag.wait()
-            await client.disconnect()
             logging.info('Disconnecting is done')
 
         except Exception as ex:

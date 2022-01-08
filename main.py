@@ -21,8 +21,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler("default.log"),
-        logging.StreamHandler()
+        logging.FileHandler("default.log")
     ]
 )
 
@@ -74,6 +73,7 @@ if __name__ == "__main__":
     poll_event_sync.set()
     stop_flag.Value = True
 
+    forwarder.
     db_poll_thread.join()
     db_poll_forwarder.join()
     history_downloader.join()
