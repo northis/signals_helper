@@ -73,7 +73,6 @@ if __name__ == "__main__":
     poll_event_sync.set()
     stop_flag.Value = True
 
-    forwarder.
     db_poll_thread.join()
     db_poll_forwarder.join()
     history_downloader.join()
