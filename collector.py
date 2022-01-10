@@ -13,6 +13,7 @@ import pytz
 import requests
 import json
 import youtube_dl
+from torpy.http.requests import TorRequests
 
 utc=pytz.UTC
 
@@ -93,13 +94,16 @@ async def main_exec(stop_flag: classes.StopFlag):
                     return              
             
             logging.info('going to collect')
-            await collect(stop_flag)
+            
+            with TorRequests() as tor_requests:
+                with tor_requests.get_session() as sess:
+                    await collect(stop_flag, sess)
 
         except Exception as ex:
             logging.info('main_exec %s', ex)
             await asyncio.sleep(5)
 
-async def collect(stop_flag: classes.StopFlag):
+async def collect(stop_flag: classes.StopFlag, sess):
     total = last_id + 1 + length
     log_every = length / 10
     log_count = 0
@@ -115,14 +119,14 @@ async def collect(stop_flag: classes.StopFlag):
             return
         try:
             url = f"{main_url_part}{current_number}{url_tail}"
-            result = requests.get(url, headers=chrome_headers)
+            result = sess.get(url, headers=chrome_headers)
             is_404 = result.status_code == 404
 
             if is_404:
                 continue
 
             if result.ok:
-                content = json.loads(result.text)
+                content = result.json()
                 name = content['name']
                 published_at = content['published_at']
                 published_at_date = helper.str_to_utc_datetime(published_at, "UTC", ISO_DATE_FORMAT)
