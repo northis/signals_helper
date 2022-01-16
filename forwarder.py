@@ -24,6 +24,7 @@ main_config = config.get_config()
 forwards = main_config['forwards']
 join_channels = main_config['join_channels']
 main_channels = list()
+tg_client = None
 
 
 def message_to_str(message):
@@ -53,7 +54,9 @@ async def main_exec(stop_flag: classes.StopFlag):
             logging.info('Pinned is set')
             await bulk_exit(client)
             logging.info('Bulk exit is done')
-            await stop_flag.wait()
+            global tg_client
+            tg_client = client
+            await client.run_until_disconnected()
             logging.info('Disconnecting is done')
 
         except Exception as ex:
