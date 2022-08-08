@@ -13,6 +13,7 @@ import pytz
 import requests
 import json
 import youtube_dl
+import concurrent.futures
 
 utc = pytz.UTC
 
@@ -21,7 +22,8 @@ load_dotenv()
 config_collector = config.get_json(COLLECTOR_CONFIG)
 SESSION = 'secure_session_history_collector.session'
 ON_ERROR_SLEEP_SEC = 60
-STEP = 1
+ON_ERROR_SLEEP_LONG_SEC = 60*10
+STEP = 30
 FILE_DB = "collector_db.json"
 ISO_DATE_FORMAT = r"%Y-%m-%dT%H:%M:%S.%fZ"
 
@@ -58,18 +60,18 @@ def load_cfg():
 
 
 def should_wait(date_str):
-    last_date = helper.str_to_utc_datetime(date_str, "UTC", ISO_DATE_FORMAT)
-    now = datetime.datetime.utcnow()
-    next_collect_date = None
+    # last_date = helper.str_to_utc_datetime(date_str, "UTC", ISO_DATE_FORMAT)
+    # now = datetime.datetime.utcnow()
+    # next_collect_date = None
 
-    weekday = now.weekday()
-    if weekday == 5 or weekday == 6:  # weekend
-        return True
-    else:
-        next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
+    # weekday = now.weekday()
+    # if weekday == 5 or weekday == 6:  # weekend
+    #     return True
+    # else:
+    #     next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
 
-    if next_collect_date > utc.localize(now):
-        return True
+    # if next_collect_date > utc.localize(now):
+    #     return True
     return False
 
 
@@ -103,11 +105,17 @@ async def main_exec(stop_flag: classes.StopFlag):
             await asyncio.sleep(5)
 
 
+def check_url(current_number):
+    url = f"{main_url_part}{current_number}{url_tail}"
+    result = requests.get(url, headers=chrome_headers)
+    return result
+
 async def collect(stop_flag: classes.StopFlag):
     total = last_id + 1 + length
     log_every = length / 2
     log_count = 0
 
+    error_nums = list()
     for current_number in range(last_id + 1, total, STEP):
         log_count = log_count + STEP
         if log_count > log_every:
@@ -118,20 +126,44 @@ async def collect(stop_flag: classes.StopFlag):
         if stop_flag.Value:
             return
         try:
-            url = f"{main_url_part}{current_number}{url_tail}"
-            result = requests.get(url, headers=chrome_headers)
-            is_404 = result.status_code == 404
+            
+            results = dict()
+            fail_result_first = None
+            with concurrent.futures.ThreadPoolExecutor(STEP) as executor:
+                futures = dict()
+                for current_num in range(current_number, current_number+STEP, 1):
+                    futures[current_num]=executor.submit(check_url, current_num)
 
-            if is_404:
-                continue
+                for error_num in error_nums:
+                    futures[current_num]=executor.submit(check_url, error_num)
 
-            if result.ok:
+                error_nums.clear()
+                fail_result_first = None
+
+                _, _ = concurrent.futures.wait(futures.values())
+                for future_key in futures.keys():
+                    future_item = futures[future_key]
+                    result_inner = future_item.result()
+                    is_404 = result_inner.status_code == 404
+                    if is_404:
+                        continue
+
+                    if result_inner.ok:
+                        results[future_key]=result_inner
+                    else:
+                        error_nums.append(future_key)
+                        if fail_result_first == None:
+                            fail_result_first = result_inner
+            
+            
+            for result_key in results.keys():
+                result = results[result_key]
                 content = json.loads(result.text)
                 name = content['name']
                 published_at = content['published_at']
                 published_at_date = helper.str_to_utc_datetime(
                     published_at, "UTC", ISO_DATE_FORMAT)
-                view_url = f"{view_url_part}{current_number}{url_tail}"
+                view_url = f"{view_url_part}{result_key}{url_tail}"
                 logging.info(
                     f"video \"{name}\" ({published_at}) found: {view_url}")
 
@@ -173,11 +205,20 @@ async def collect(stop_flag: classes.StopFlag):
 
                 if should_wait(published_at):
                     return
-            else:
-                logging.info(
-                    f"resp_code: {result.status_code}, id: {current_number}, sleep for {ON_ERROR_SLEEP_SEC} sec")
-                await asyncio.sleep(ON_ERROR_SLEEP_SEC)
+
+            err_len = len(error_nums)
+            if err_len == 0:
+                continue
+
+            sec_to_sleep = ON_ERROR_SLEEP_SEC
+            if(err_len>STEP):
+                sec_to_sleep = ON_ERROR_SLEEP_LONG_SEC
+            
+            logging.info(
+                f"resp_code: {fail_result_first.status_code}, url 1st: {fail_result_first.url},sleep for {sec_to_sleep} sec, failed urls: {err_len}")
+            await asyncio.sleep(sec_to_sleep)
 
         except Exception as ex:
             logging.info(f"collector error: {ex}")
             await asyncio.sleep(ON_ERROR_SLEEP_SEC)
+

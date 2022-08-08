@@ -164,13 +164,13 @@ def import_all_example():
 
 def get_telemetr_url(channel_id, offset, type_query="all"):
     # type_query="deleted|all"
-    telemetr_url = f"{TELEMETR_BASE_URL}/{channel_id}?sort=date&postType={type_query}&before={offset}&period=365"
+    telemetr_url = f"{TELEMETR_BASE_URL}/{channel_id}?sort=-date&postType={type_query}&before={offset}&period=365"
     return telemetr_url
 
 
-def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
+def telemetr_parse_history(channel_id, start=900, end=6600, step=100):
     messages = list()
-    for offset in range(start, max_offset, step):
+    for offset in range(start, end, step):
         url = get_telemetr_url(channel_id, offset)
         html = requests.get(url).text
         if html is None or html == "":
@@ -187,7 +187,7 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
                 msg_datetime = msg_datetime[0].attrib["datetime"]
                 views = int(PyQuery(tag)("div.views").text().replace(" ",""))
 
-                if views < 10:  # We treat this like a mistake and don't take in account such messages
+                if views < 20:  # We treat this like a mistake and don't take in account such messages
                     continue
 
                 onclick_value = PyQuery(tag)("div.post-link-icon-btn")[0].attrib["onclick"]
@@ -196,7 +196,9 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
                     continue            
 
                 id_ =  int(id_search.groups(1)[0].replace(" ",""))
-                # is_deleted = len(PyQuery(tag)("div.post-deleted-block")) > 0
+                is_deleted = len(PyQuery(tag)("div.post-deleted-block")) > 0
+                if is_deleted:
+                    continue
                 text = PyQuery(tag)("div.post-block__content_message").text()
                 message_links = re.findall(
                     forwarder.LINKS_REGEX, text, re.IGNORECASE)
@@ -214,7 +216,14 @@ def telemetr_parse_history(channel_id, max_offset, start=0, step=100):
 
 
 if __name__ == "__main__":
-    import_all_example()
+    history_data = telemetr_parse_history(1517729747,100,1500)
+    res_dict = dict()
+    for item in  history_data:
+        res_dict[item["id"]] = item
+
+    config.set_json(f"D:/1517729747_1.json",  sorted(res_dict.values(), key=lambda x: x["id"], reverse=False))
+
+    #import_all_example()
     
     # exec_string = f"SELECT Id FROM Channel Where Id<> {config.PINNED_EXCEPT_CHANNEL_ID}"
     # channels_ids = None
