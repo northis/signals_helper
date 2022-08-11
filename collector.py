@@ -23,7 +23,7 @@ config_collector = config.get_json(COLLECTOR_CONFIG)
 SESSION = 'secure_session_history_collector.session'
 ON_ERROR_SLEEP_SEC = 60
 ON_ERROR_SLEEP_LONG_SEC = 60*10
-STEP = 30
+STEP = 1
 FILE_DB = "collector_db.json"
 ISO_DATE_FORMAT = r"%Y-%m-%dT%H:%M:%S.%fZ"
 
@@ -60,18 +60,20 @@ def load_cfg():
 
 
 def should_wait(date_str):
-    # last_date = helper.str_to_utc_datetime(date_str, "UTC", ISO_DATE_FORMAT)
-    # now = datetime.datetime.utcnow()
-    # next_collect_date = None
+    last_date = helper.str_to_utc_datetime(date_str, "UTC", ISO_DATE_FORMAT)
+    now = datetime.datetime.utcnow()
+    next_collect_date = None
 
-    # weekday = now.weekday()
-    # if weekday == 5 or weekday == 6:  # weekend
-    #     return True
-    # else:
-    #     next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
+    weekday = now.weekday()
+    if (weekday == 5 and now.hour>=3) or weekday == 6:  # weekend
+        return True
+    elif now.hour > 3 and now.hour < 12: # night
+        return True
+    else:
+        next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
 
-    # if next_collect_date > utc.localize(now):
-    #     return True
+    if next_collect_date > utc.localize(now):
+        return True
     return False
 
 
@@ -99,6 +101,7 @@ async def main_exec(stop_flag: classes.StopFlag):
             logging.info('going to collect')
 
             await collect(stop_flag)
+            await asyncio.sleep(5)
 
         except Exception as ex:
             logging.info('main_exec %s', ex)
@@ -191,13 +194,13 @@ async def collect(stop_flag: classes.StopFlag):
                     os.remove(out_file)
 
                 to_save = dict()
-                to_save['id'] = current_number
+                to_save['id'] = result_key
                 to_save['published_at'] = published_at
                 to_save['name'] = content['name']
                 to_save['url'] = view_url
                 result_list.insert(0, to_save)
                 config.set_json(FILE_DB, result_list)
-                config_collector["last_id"] = current_number
+                config_collector["last_id"] = result_key
                 config_collector["last_date"] = published_at
                 config.set_json(COLLECTOR_CONFIG, config_collector)
                 got_collected = True
@@ -205,7 +208,8 @@ async def collect(stop_flag: classes.StopFlag):
 
                 if should_wait(published_at):
                     return
-
+            
+            #logging.info(f"id passed: {current_number}")
             err_len = len(error_nums)
             if err_len == 0:
                 continue
