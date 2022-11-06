@@ -65,9 +65,7 @@ def should_wait(date_str):
     next_collect_date = None
 
     weekday = now.weekday()
-    if (weekday == 5 and now.hour>=3) or weekday == 6:  # weekend
-        return True
-    elif now.hour > 3 and now.hour < 12: # night
+    if (weekday == 5 and now.hour>=3) or (weekday == 6 and now.hour<=15):  # weekend
         return True
     else:
         next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
