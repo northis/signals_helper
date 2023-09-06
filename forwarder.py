@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import logging
 import asyncio
 import re
@@ -488,13 +489,13 @@ def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
     logging.info(f'forward_exec: chat: {from_chat_id}')
     @client.on(events.NewMessage())
     async def handler(event):
-        msg_str = event.message.message
-        logging.info("NewMessage: " + msg_str)
+        logging.info(f'NewMessage, event: {event}')
         if event.chat_id == from_chat_id:
             await main_forward_message(to_primary_id, to_secondary_id, client, event)
 
     @client.on(events.MessageEdited())
     async def handler_edit(event):
+        logging.info(f'MessageEdited, event: {event}')
         if event.chat_id== from_chat_id:
             await main_edit_message(to_primary_id, client, event)
 

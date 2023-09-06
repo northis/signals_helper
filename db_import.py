@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import datetime
 import decimal
 import fileinput
@@ -15,6 +16,9 @@ import config
 import helper
 import time
 import sys
+import time
+import sys
+import concurrent.futures
 
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
@@ -172,6 +176,7 @@ def get_telemetr_url(channel_id, offset, type_query="all"):
 
 def telemetr_parse_history(channel_id, start=900, end=6600, step=100):
     messages = list()
+    got_text = False
     for offset in range(start, end, step):
         url = get_telemetr_url(channel_id, offset)
 
@@ -187,9 +192,13 @@ def telemetr_parse_history(channel_id, start=900, end=6600, step=100):
             time.sleep(total_sec_wait)
             total_sec_wait = total_sec_wait*2                
 
+        # print(f"{100*(offset-start)/(end-start):3.0f}%", end='\r')
         html = request.text
         if html is None or html == "":
-            continue
+            if got_text:
+                break
+            else:
+                continue
 
         sys.stdout.write(f"\r{100*(offset-start)/(end-start):3.0f}% %i" % i)
         sys.stdout.flush()
@@ -237,17 +246,36 @@ def save_id(id):
     for item in  history_data:
         res_dict[item["id"]] = item
 
-    config.set_json(f"E:/parsed/{id}.json",  sorted(res_dict.values(), key=lambda x: x["id"], reverse=False))
+    config.set_json(f"D:/parsed_new/{id}.json",  sorted(res_dict.values(), key=lambda x: x["id"], reverse=False))
     
+def bulk_query(array):
+    len_arr = len(array)
+    for idO in array:
+        print(f"channel id: {idO}, len {len_arr}")
+        save_id(idO)
+
 if __name__ == "__main__":
 
     array = [
-1529689555,
+1428566201
 ]
 
-    for idO in array:
-        print(f"channel id: {idO}")
-        save_id(idO)
+    total = len(array)
+    count = 0
+ 
+    STEP = 50
+    with concurrent.futures.ThreadPoolExecutor(STEP) as executor:
+        futures = list()
+        for current_num in range(0, total, STEP):
+            local_part = array[current_num:current_num+STEP]
+            futures.append(executor.submit(bulk_query, local_part))
+
+        _, _ = concurrent.futures.wait(futures)
+
+    # for idO in array:
+    #     print(f"channel id: {idO}, {count} from {total}")
+    #     save_id(idO)
+    #     count = count+1
 
     #import_all_example()
     
@@ -293,3 +321,4 @@ if __name__ == "__main__":
     convert_history_json(input_file, timezone_local)
     print("Done, press any key to exit")
     input()
+>>>>>>> 2e2316a332a26e1c7b9aa66024847e7c9bb7480a
