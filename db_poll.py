@@ -58,6 +58,7 @@ def process_price_data(symbol, access_type, request_browser_page=None):
         return
 
     with classes.SQLite(config.DB_SYMBOLS_PATH, 'process_price_data:', lock) as cur:
+        inserted = 0
         for price_item in sorted_items:
             utc_date = price_item[0]
             if symbol_last_datetime.replace(tzinfo=None) > utc_date.replace(tzinfo=None):
@@ -66,7 +67,9 @@ def process_price_data(symbol, access_type, request_browser_page=None):
             utc_date_str = utc_date.strftime(config.DB_DATE_FORMAT)
 
             exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date_str}',{price_item[1]},{price_item[2]},{price_item[3]},{price_item[4]}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
+            inserted+=1
             cur.execute(exec_string)
+            logging.info(f"inserted rows: {inserted}")
 
 
 def update_db_time_ranges():
@@ -112,7 +115,7 @@ def poll_symbols(signal_event: threading.Event):
         while not signal_event.is_set():
 
             for symbol in parsers.investing_symbol_api_mapping:
-                process_price_data(symbol, AccessType.investing,page)
+                process_price_data(symbol, AccessType.investing, page)
 
             for symbol in parsers.crypto_symbol_api_mapping:
                 process_price_data(symbol, AccessType.bitfinex)

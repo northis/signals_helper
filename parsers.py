@@ -110,7 +110,6 @@ def parse_investing(symbol, symbol_last_datetime, request_browser_page=None):
         request_browser_page.goto(url) 
         content = request_browser_page.inner_text('body')   
 
-    logging.info(content)
     price_data = json.loads(content)
 
     times = price_data["t"]
