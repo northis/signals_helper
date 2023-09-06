@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 
 import config
 import helper
+import time
+import sys
 
 load_dotenv()
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
@@ -172,11 +174,26 @@ def telemetr_parse_history(channel_id, start=900, end=6600, step=100):
     messages = list()
     for offset in range(start, end, step):
         url = get_telemetr_url(channel_id, offset)
-        html = requests.get(url).text
+
+        request = None
+        total_sec_wait = 5
+        while request is None or not request.ok:
+            try:
+                request = requests.get(url)
+                if request.ok:
+                    break
+            except Exception as ex:
+                print(f"Request has failed: {ex}")
+            time.sleep(total_sec_wait)
+            total_sec_wait = total_sec_wait*2                
+
+        html = request.text
         if html is None or html == "":
             continue
 
-        print(f"Offset: {offset}")
+        sys.stdout.write(f"\r{100*(offset-start)/(end-start):3.0f}% %i" % i)
+        sys.stdout.flush()
+
         tags = PyQuery(html)('div[id^="post-"]')
         for tag in tags:
             try:
@@ -214,14 +231,23 @@ def telemetr_parse_history(channel_id, start=900, end=6600, step=100):
             messages.append(tag_dict)
     return messages
 
-
-if __name__ == "__main__":
-    history_data = telemetr_parse_history(1517729747,100,1500)
+def save_id(id):
+    history_data = telemetr_parse_history(id,1000,10000)
     res_dict = dict()
     for item in  history_data:
         res_dict[item["id"]] = item
 
-    config.set_json(f"D:/1517729747_1.json",  sorted(res_dict.values(), key=lambda x: x["id"], reverse=False))
+    config.set_json(f"E:/parsed/{id}.json",  sorted(res_dict.values(), key=lambda x: x["id"], reverse=False))
+    
+if __name__ == "__main__":
+
+    array = [
+1529689555,
+]
+
+    for idO in array:
+        print(f"channel id: {idO}")
+        save_id(idO)
 
     #import_all_example()
     

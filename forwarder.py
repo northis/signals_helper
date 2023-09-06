@@ -44,6 +44,7 @@ async def main_exec(stop_flag: classes.StopFlag):
         try:
             primary = None
             dialogs = list(await client.get_dialogs())
+
             for forward in forwards:
                 await init_forward(forward, client, dialogs)
                 if primary is None:
@@ -52,8 +53,8 @@ async def main_exec(stop_flag: classes.StopFlag):
             primary_chat = await get_chat_by_id(client, int(primary["id"]))
             await db_stats.set_pinned(client, forwards, primary_chat)
             logging.info('Pinned is set')
-            await bulk_exit(client)
-            logging.info('Bulk exit is done')
+            # await bulk_exit(client)
+            # logging.info('Bulk exit is done')
             global tg_client
             tg_client = client
             await client.run_until_disconnected()
@@ -363,7 +364,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
     orig_message_text = str(message.to_dict()['message'])
     message_text = orig_message_text.lower()
     id_channel = message.chat.id
-    logging.info('Got new message: %s, channel id: %s', orig_message_text, id_channel)
+    # logging.info('Got new message: %s, channel id: %s', orig_message_text.encode('utf8'), id_channel)
 
     (is_primary, join_urls, reply) = await define_urls(message)
 
@@ -432,10 +433,10 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
         if is_primary:
             forward_res = await forward_primary(to_primary_id, message, reply, client)
 
-            should_send_stat_msg = is_price_actual(
-                symbol, price) and forward_res is not None and is_signal and is_symbol and (has_sl or has_tp)
-            if not should_send_stat_msg:
-                return
+            # should_send_stat_msg = is_price_actual(
+            #     symbol, price) and forward_res is not None and is_signal and is_symbol and (has_sl or has_tp)
+            # if not should_send_stat_msg:
+            #     return
 
             tp_item = None
             for tps_inner in tps:
@@ -485,15 +486,19 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
 
 def forward_exec(from_chat_id, to_primary_id, to_secondary_id, client):
     logging.info(f'forward_exec: chat: {from_chat_id}')
-    @client.on(events.NewMessage(chats=(from_chat_id)))
+    @client.on(events.NewMessage())
     async def handler(event):
-        await main_forward_message(to_primary_id, to_secondary_id, client, event)
+        msg_str = event.message.message
+        logging.info("NewMessage: " + msg_str)
+        if event.chat_id == from_chat_id:
+            await main_forward_message(to_primary_id, to_secondary_id, client, event)
 
-    @client.on(events.MessageEdited(chats=(from_chat_id)))
+    @client.on(events.MessageEdited())
     async def handler_edit(event):
-        await main_edit_message(to_primary_id, client, event)
+        if event.chat_id== from_chat_id:
+            await main_edit_message(to_primary_id, client, event)
 
-
+        
 def get_invite_string_from_url(url):
     search_link = re.search(INVITE_REGEX, url)
     if search_link is not None:

@@ -7,6 +7,7 @@ import classes
 import config
 import helper
 import parsers
+from playwright.sync_api import sync_playwright 
 
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 
@@ -41,7 +42,7 @@ db_time_ranges = {
 timer: threading.Timer = None
 
 
-def process_price_data(symbol, access_type):
+def process_price_data(symbol, access_type, request_browser_page=None):
     symbol_last_datetime = db_time_ranges[symbol][1]
 
     if access_type == AccessType.bitfinex:
@@ -52,7 +53,7 @@ def process_price_data(symbol, access_type):
 
     elif access_type == AccessType.investing:
         sorted_items = parsers.parse_investing(
-            symbol, symbol_last_datetime)
+            symbol, symbol_last_datetime, request_browser_page)
     else:
         return
 
@@ -103,34 +104,40 @@ def update_db_time_range(symbol):
 
 
 def poll_symbols(signal_event: threading.Event):
-    while not signal_event.is_set():
 
-        for symbol in parsers.investing_symbol_api_mapping:
-            process_price_data(symbol, AccessType.investing)
+    with sync_playwright() as p: 
+        browser = p.chromium.launch() 
+        page = browser.new_page() 
 
-        for symbol in parsers.crypto_symbol_api_mapping:
-            process_price_data(symbol, AccessType.bitfinex)
+        while not signal_event.is_set():
 
-        for symbol in parsers.symbol_api_mapping:
-            try_request = True
-            while try_request:
-                try:
-                    # Naughty API, may behave badly sometimes
-                    process_price_data(symbol, AccessType.alphavantage)
-                    try_request = False
-                except Exception as ex:
-                    logging.info(
-                        'poll_symbols, alphavantage, symbol %s, error: %s', symbol, ex)
-                    poll_event.clear()
-                    poll_event.wait(POLL_THROTTLE_SEC)
+            for symbol in parsers.investing_symbol_api_mapping:
+                process_price_data(symbol, AccessType.investing,page)
+
+            for symbol in parsers.crypto_symbol_api_mapping:
+                process_price_data(symbol, AccessType.bitfinex)
+
+            for symbol in parsers.symbol_api_mapping:
+                try_request = True
+                while try_request:
+                    try:
+                        # Naughty API, may behave badly sometimes
+                        process_price_data(symbol, AccessType.alphavantage)
+                        try_request = False
+                    except Exception as ex:
+                        logging.info(
+                            'poll_symbols, alphavantage, symbol %s, error: %s', symbol, ex)
+                        poll_event.clear()
+                        poll_event.wait(POLL_THROTTLE_SEC)
+
+                poll_event.clear()
+                poll_event.wait(POLL_THROTTLE_SEC)
+
+            update_db_time_ranges()
 
             poll_event.clear()
-            poll_event.wait(POLL_THROTTLE_SEC)
-
-        update_db_time_ranges()
-
-        poll_event.clear()
-        poll_event.wait(POLL_INTERVAL_SEC)
+            poll_event.wait(POLL_INTERVAL_SEC)
+        browser.close() 
 
 
 def main_exec(wait_event: threading.Event):

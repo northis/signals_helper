@@ -14,6 +14,7 @@ import requests
 import json
 import youtube_dl
 import concurrent.futures
+import time
 
 utc = pytz.UTC
 
@@ -22,8 +23,8 @@ load_dotenv()
 config_collector = config.get_json(COLLECTOR_CONFIG)
 SESSION = 'secure_session_history_collector.session'
 ON_ERROR_SLEEP_SEC = 60
-ON_ERROR_SLEEP_LONG_SEC = 60*10
-STEP = 1
+ON_ERROR_SLEEP_LONG_SEC = 60*3
+STEP = 10
 FILE_DB = "collector_db.json"
 ISO_DATE_FORMAT = r"%Y-%m-%dT%H:%M:%S.%fZ"
 
@@ -65,9 +66,7 @@ def should_wait(date_str):
     next_collect_date = None
 
     weekday = now.weekday()
-    if (weekday == 5 and now.hour>=3) or weekday == 6:  # weekend
-        return True
-    elif now.hour > 3 and now.hour < 12: # night
+    if (weekday == 5 and now.hour>=3) or (weekday == 6):  # weekend
         return True
     else:
         next_collect_date = last_date + datetime.timedelta(seconds=delay_sec)
@@ -83,6 +82,8 @@ async def main_exec(stop_flag: classes.StopFlag):
     no_collect_in_a_row_count = 0
     while True:
         try:
+            if stop_flag.Value:
+                return
             load_cfg()
             if got_collected:
                 got_collected = False
@@ -93,14 +94,16 @@ async def main_exec(stop_flag: classes.StopFlag):
                 logging.info(f'cannot collect, extend the range to {length}')
 
             logging.info('collector - next iteration')
-            while should_wait(config_collector["last_date"]) and not stop_flag.Value:
-                await asyncio.sleep(stop_flag.Sleep)
+            while should_wait(config_collector["last_date"]):
                 if stop_flag.Value:
                     return
+                await asyncio.sleep(stop_flag.Sleep)
 
             logging.info('going to collect')
 
             await collect(stop_flag)
+            if stop_flag.Value:
+                return
             await asyncio.sleep(5)
 
         except Exception as ex:
@@ -124,7 +127,7 @@ async def collect(stop_flag: classes.StopFlag):
         if log_count > log_every:
             log_count = 0
             logging.info("collecting... {0}%".format(
-                100*(total - current_number)/total))
+                100*(total - current_number)/length))
 
         if stop_flag.Value:
             return
@@ -163,6 +166,7 @@ async def collect(stop_flag: classes.StopFlag):
                 result = results[result_key]
                 content = json.loads(result.text)
                 name = content['name']
+                duration = time.strftime('%H:%M:%S', time.gmtime(content['duration']/1000))
                 published_at = content['published_at']
                 published_at_date = helper.str_to_utc_datetime(
                     published_at, "UTC", ISO_DATE_FORMAT)
@@ -180,13 +184,13 @@ async def collect(stop_flag: classes.StopFlag):
                     logging.info(f"on grab error: {ex}")
                     has_video = False
 
-                text_msg = f"\"{name}\" - {published_at}"
+                text_msg = f"\"{name}\" \n{published_at} ({duration})"
 
                 async with TelegramClient(SESSION, config.api_id, config.api_hash) as client:
                     for send_id in send_ids:
                         if has_video:
-                            await client.send_file(send_id, out_file)
-                            await client.send_message(send_id, f"{text_msg}\n{view_url}", silent=True)
+                            await client.send_file(send_id, out_file, silent=True)
+                            await client.send_message(send_id, f"{text_msg}\n{view_url}")
                         else:
                             await client.send_message(send_id, f"{text_msg}\n{view_url}")
 
@@ -209,9 +213,9 @@ async def collect(stop_flag: classes.StopFlag):
                 if should_wait(published_at):
                     return
             
-            #logging.info(f"id passed: {current_number}")
             err_len = len(error_nums)
-            if err_len == 0:
+            if err_len == 0:                
+                # print(f"id passed: {current_number}")
                 continue
 
             sec_to_sleep = ON_ERROR_SLEEP_SEC

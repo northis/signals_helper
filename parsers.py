@@ -1,4 +1,5 @@
 import datetime
+import logging
 import json
 import requests
 import helper
@@ -8,11 +9,11 @@ from helper import get_array_item_contains_key
 
 POLL_INPUT_FORMAT = r"%Y-%m-%d %H:%M:%S"
 # BASE_URL = f"https://www.alphavantage.co/query?&interval=1min&apikey={config.API_KEY}"
-BASE_URL_INVESTING = f"https://tvc4.forexpros.com/{config.API_KEY_INVESTING}/0/0/0/0/history?resolution=1"
+BASE_URL_INVESTING = f"https://tvc4.investing.com/{config.API_KEY_INVESTING}/0/0/0/0/history?resolution=D"
 # FX_URL = f"{BASE_URL}&function=FX_INTRADAY"
 # CRYPTO_URL = f"https://api-pub.bitfinex.com/v2/candles/trade:1m:"
 investing_chrome_headers = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.90 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/116.0"
 }
 
 symbol_api_mapping = {
@@ -94,13 +95,22 @@ def parse_bitfinex(symbol, symbol_last_datetime):
         yield (utc_date, open_, high, low, close)
 
 
-def parse_investing(symbol, symbol_last_datetime):
+def parse_investing(symbol, symbol_last_datetime, request_browser_page=None):
 
     start_unix_dt = int(symbol_last_datetime.timestamp())
     end_unix_dt = int(datetime.datetime.now().timestamp())
     url = f"{investing_symbol_api_mapping[symbol]}&from={start_unix_dt}&to={end_unix_dt}"
-    req = requests.get(url, headers=investing_chrome_headers)
-    content = req.text
+
+    content = ""
+
+    if request_browser_page == None:        
+        req = requests.get(url, headers=investing_chrome_headers)
+        content = req.text
+    else:
+        request_browser_page.goto(url) 
+        content = request_browser_page.inner_text('body')   
+
+    logging.info(content)
     price_data = json.loads(content)
 
     times = price_data["t"]
