@@ -9,7 +9,7 @@ from helper import get_array_item_contains_key
 
 POLL_INPUT_FORMAT = r"%Y-%m-%d %H:%M:%S"
 # BASE_URL = f"https://www.alphavantage.co/query?&interval=1min&apikey={config.API_KEY}"
-BASE_URL_INVESTING = f"https://tvc4.investing.com/{config.API_KEY_INVESTING}/0/0/0/0/history?resolution=D"
+BASE_URL_INVESTING = f"https://tvc4.investing.com/{config.API_KEY_INVESTING}/0/0/0/0/history?resolution=1"
 # FX_URL = f"{BASE_URL}&function=FX_INTRADAY"
 # CRYPTO_URL = f"https://api-pub.bitfinex.com/v2/candles/trade:1m:"
 investing_chrome_headers = {

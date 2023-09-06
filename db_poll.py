@@ -12,7 +12,7 @@ from playwright.sync_api import sync_playwright
 DT_INPUT_FORMAT = r"%Y.%m.%dT%H:%M:%S.%f"
 
 poll_event = threading.Event()
-POLL_INTERVAL_SEC = 4 * 60 * 60
+POLL_INTERVAL_SEC = 4 * 60
 POLL_THROTTLE_SEC = 2 * 60
 lock = threading.Lock()
 
@@ -67,9 +67,9 @@ def process_price_data(symbol, access_type, request_browser_page=None):
             utc_date_str = utc_date.strftime(config.DB_DATE_FORMAT)
 
             exec_string = f"INSERT INTO {symbol} VALUES ('{utc_date_str}',{price_item[1]},{price_item[2]},{price_item[3]},{price_item[4]}) ON CONFLICT(DateTime) DO UPDATE SET Close=excluded.Close"
-            inserted+=1
+            inserted=+1
             cur.execute(exec_string)
-            logging.info(f"inserted rows: {inserted}")
+        logging.info(f"inserted rows: {inserted}")
 
 
 def update_db_time_ranges():
