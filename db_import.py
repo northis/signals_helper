@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 import datetime
 import decimal
 import fileinput
@@ -321,4 +320,3 @@ if __name__ == "__main__":
     convert_history_json(input_file, timezone_local)
     print("Done, press any key to exit")
     input()
->>>>>>> 2e2316a332a26e1c7b9aa66024847e7c9bb7480a
