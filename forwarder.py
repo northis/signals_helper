@@ -364,7 +364,7 @@ async def main_forward_message(to_primary_id, to_secondary_id, client, event):
     orig_message_text = str(message.to_dict()['message'])
     message_text = orig_message_text.lower()
     id_channel = message.chat.id
-    # logging.info('Got new message: %s, channel id: %s', orig_message_text.encode('utf8'), id_channel)
+    logging.info('Got new message: %s, channel id: %s', orig_message_text.encode('utf8'), id_channel)
 
     (is_primary, join_urls, reply) = await define_urls(message)
 

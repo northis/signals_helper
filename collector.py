@@ -22,7 +22,7 @@ utc = pytz.UTC
 COLLECTOR_CONFIG = "collector_config.json"
 load_dotenv()
 config_collector = config.get_json(COLLECTOR_CONFIG)
-SESSION = 'secure_session_history_collector.session'
+SESSION = 'secure_session_collector.session'
 ON_ERROR_SLEEP_SEC = 60
 ON_ERROR_SLEEP_LONG_SEC = 60*3
 STEP = 10
@@ -122,7 +122,7 @@ async def collect(stop_flag: classes.StopFlag):
     total = last_id + 1 + length
     log_every = length / 2
     log_count = 0
-
+    
     error_nums = list()
     for current_number in range(last_id + 1, total, STEP):
         log_count = log_count + STEP
