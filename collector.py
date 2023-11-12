@@ -249,16 +249,16 @@ if __name__ == "__main__":
     load_cfg()
     video_folder = "video"
 
-    for video in result_list:
+    for video in sorted(result_list, key=lambda a: int(a["id"])):
         file_name = get_safe_path(video["name"])
         published_at = video["published_at"]
         id_ = video["id"]
+        view_url = video["url"]
 
         out_file = os.path.join(video_folder, f"{published_at}_{id_}_{file_name}.mp4")
         try:
             ydl_opts = {"outtmpl": out_file}
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                view_url = f"{view_url_part}{id_}{url_tail}"
                 ydl.download([view_url])
 
             if "poster" in video:
