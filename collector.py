@@ -16,10 +16,12 @@ import json
 import youtube_dl
 import concurrent.futures
 import time
+import urllib.request
 
 utc = pytz.UTC
 
 COLLECTOR_CONFIG = "collector_config.json"
+TIME_FORMAT = '%H:%M:%S'
 load_dotenv()
 config_collector = config.get_json(COLLECTOR_CONFIG)
 SESSION = 'secure_session_collector.session'
@@ -118,6 +120,7 @@ def check_url(current_number):
     result = requests.get(url, headers=chrome_headers)
     return result
 
+
 async def collect(stop_flag: classes.StopFlag):
     total = last_id + 1 + length
     log_every = length / 2
@@ -168,7 +171,7 @@ async def collect(stop_flag: classes.StopFlag):
                 result = results[result_key]
                 content = json.loads(result.text)
                 name = content['name']
-                duration = time.strftime('%H:%M:%S', time.gmtime(content['duration']/1000))
+                duration = time.strftime(TIME_FORMAT, time.gmtime(content['duration']/1000))
                 published_at = content['published_at']
                 published_at_date = helper.str_to_utc_datetime(
                     published_at, "UTC", ISO_DATE_FORMAT)
@@ -203,7 +206,9 @@ async def collect(stop_flag: classes.StopFlag):
                 to_save['id'] = result_key
                 to_save['published_at'] = published_at
                 to_save['name'] = content['name']
+                to_save['poster'] = content['poster']
                 to_save['url'] = view_url
+                to_save['duration'] = duration
                 result_list.insert(0, to_save)
                 config.set_json(FILE_DB, result_list)
                 config_collector["last_id"] = result_key
@@ -231,3 +236,35 @@ async def collect(stop_flag: classes.StopFlag):
         except Exception as ex:
             logging.info(f"collector error: {ex}")
             await asyncio.sleep(ON_ERROR_SLEEP_SEC)
+
+def replace_characters(target_str, chars_to_replace, replacement_char):
+    translation_table = str.maketrans(chars_to_replace, replacement_char * len(chars_to_replace))
+    return target_str.translate(translation_table)
+
+def get_safe_path(path):
+    return replace_characters(path,"<>:\"/\|?* ", "_")
+
+# For manual run
+if __name__ == "__main__":
+    load_cfg()
+    video_folder = "video"
+
+    for video in result_list:
+        file_name = get_safe_path(video["name"])
+        published_at = video["published_at"]
+        id_ = video["id"]
+
+        out_file = os.path.join(video_folder, f"{published_at}_{id_}_{file_name}.mp4")
+        try:
+            ydl_opts = {"outtmpl": out_file}
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                view_url = f"{view_url_part}{id_}{url_tail}"
+                ydl.download([view_url])
+
+            if "poster" in video:
+                poster_file = os.path.join(video_folder, get_safe_path(f"{published_at}_{id_}_{file_name}.jpg"))
+                poster_url = video["poster"]
+                urllib.request.urlretrieve(poster_url, poster_file)
+
+        except Exception as ex:
+            print(f"on grab error: {ex}")
