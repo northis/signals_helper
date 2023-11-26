@@ -17,6 +17,9 @@ import youtube_dl
 import concurrent.futures
 import time
 import urllib.request
+import cv2
+import numpy as np
+import ntpath
 
 utc = pytz.UTC
 
@@ -237,32 +240,26 @@ async def collect(stop_flag: classes.StopFlag):
             logging.info(f"collector error: {ex}")
             await asyncio.sleep(ON_ERROR_SLEEP_SEC)
 
-def replace_characters(target_str, chars_to_replace, replacement_char):
-    translation_table = str.maketrans(chars_to_replace, replacement_char * len(chars_to_replace))
-    return target_str.translate(translation_table)
-
-def get_safe_path(path):
-    return replace_characters(path,"<>:\"/\|?* ", "_")
+    
 
 # For manual run
 if __name__ == "__main__":
     load_cfg()
-    video_folder = "video"
 
     for video in sorted(result_list, key=lambda a: int(a["id"])):
-        file_name = get_safe_path(video["name"])
-        published_at = video["published_at"]
+        file_name = config.get_safe_path(video["name"])
+        published_at = config.replace_characters(video["published_at"])
         id_ = video["id"]
         view_url = video["url"]
 
-        out_file = os.path.join(video_folder, f"{published_at}_{id_}_{file_name}.mp4")
+        out_file = os.path.join(config.VIDEO_PATH, f"{published_at}_{id_}_{file_name}.mp4")
         try:
             ydl_opts = {"outtmpl": out_file}
             with youtube_dl.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([view_url])
 
             if "poster" in video:
-                poster_file = os.path.join(video_folder, get_safe_path(f"{published_at}_{id_}_{file_name}.jpg"))
+                poster_file = os.path.join(config.VIDEO_PATH, config.get_safe_path(f"{published_at}_{id_}_{file_name}.jpg"))
                 poster_url = video["poster"]
                 urllib.request.urlretrieve(poster_url, poster_file)
 

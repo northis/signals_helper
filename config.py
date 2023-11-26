@@ -20,6 +20,11 @@ API_KEY = os.getenv("api_key")
 API_KEY_INVESTING = os.getenv("api_key_investing")
 PINNED_INFO_MESSAGE_ID = os.getenv("pinned_info_message_id")
 TEMPLATE_PINNED_PATH = "template.pinned.txt"
+AUDIO_EXT = ".mp3"
+IMAGE_EXT = ".jpg"
+VIDEO_EXT = ".mp4"
+VIDEO_PATH = "video"
+IMAGES_PATH = "images"
 
 
 def get_json(file):
@@ -58,3 +63,11 @@ def get_links():
 
 def set_links(links):
     set_json('links.json', links)
+
+    
+def replace_characters(target_str, chars_to_replace, replacement_char):
+    translation_table = str.maketrans(chars_to_replace, replacement_char * len(chars_to_replace))
+    return target_str.translate(translation_table)
+
+def get_safe_path(path):
+    return replace_characters(path,"<>:\"/\|?* ", "_")

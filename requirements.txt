@@ -5,3 +5,5 @@ requests==2.25.1
 pyquery==1.4.3
 youtube_dl==2021.12.17
 playwright==1.37.0
+opencv-python==4.8.1.78
+moviepy==1.0.3
