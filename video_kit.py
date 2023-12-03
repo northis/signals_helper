@@ -9,6 +9,7 @@ import ntpath
 import glob
 import os
 from moviepy.editor import VideoFileClip
+import concurrent.futures
 
 backSub = cv2.createBackgroundSubtractorMOG2(history=500, varThreshold=25, detectShadows=False)
 
@@ -73,7 +74,23 @@ def extract_frames(video_path, out_dir):
     cap.release()
 
 
-    
+def run_with_timeout(func):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func)
+        
+        try:
+            future.result(timeout=60)
+        except concurrent.futures.TimeoutError:
+            print(f"TimeoutError, aborting...")
+
+def extract_audio(file, folder):
+    audio_path = os.path.join(folder, f"{file_name_main}{config.AUDIO_EXT}")
+    video_clip = VideoFileClip(file)
+    audio_clip = video_clip.audio
+    audio_clip.write_audiofile(audio_path)
+    audio_clip.close()
+    video_clip.close()
+
 
 if __name__ == "__main__":
     for file in glob.glob(f"{config.VIDEO_PATH}/*{config.VIDEO_EXT}"):
@@ -84,13 +101,7 @@ if __name__ == "__main__":
             os.makedirs(folder)
 
         try:
-            audio_path = os.path.join(folder, f"{file_name_main}{config.AUDIO_EXT}")
-            video_clip = VideoFileClip(file)
-            audio_clip = video_clip.audio
-            audio_clip.write_audiofile(audio_path)
-            audio_clip.close()
-            video_clip.close()
-
+            run_with_timeout(lambda: extract_audio(file, folder))
             extract_frames(file, folder)
         except Exception as ex:
             print(f"Error {ex}")
