@@ -83,11 +83,14 @@ if __name__ == "__main__":
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-        audio_path = os.path.join(folder, f"{file_name_main}{config.AUDIO_EXT}")
-        video_clip = VideoFileClip(file)
-        audio_clip = video_clip.audio
-        audio_clip.write_audiofile(audio_path)
-        audio_clip.close()
-        video_clip.close()
+        try:
+            audio_path = os.path.join(folder, f"{file_name_main}{config.AUDIO_EXT}")
+            video_clip = VideoFileClip(file)
+            audio_clip = video_clip.audio
+            audio_clip.write_audiofile(audio_path)
+            audio_clip.close()
+            video_clip.close()
 
-        extract_frames(file, folder)
+            extract_frames(file, folder)
+        except Exception as ex:
+            print(f"Error {ex}")
