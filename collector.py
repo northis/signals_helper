@@ -20,6 +20,7 @@ import urllib.request
 import cv2
 import numpy as np
 import ntpath
+import video_kit
 
 utc = pytz.UTC
 
@@ -251,17 +252,42 @@ if __name__ == "__main__":
         published_at = config.replace_characters(video["published_at"])
         id_ = video["id"]
         view_url = video["url"]
+        
+        base_name = f"{published_at}_{id_}_{file_name}"
+        out_file = os.path.join(config.VIDEO_PATH, f"{base_name}.mp4")
 
-        out_file = os.path.join(config.VIDEO_PATH, f"{published_at}_{id_}_{file_name}.mp4")
-        try:
-            ydl_opts = {"outtmpl": out_file}
-            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([view_url])
+        images_folder = os.path.join(config.IMAGES_PATH, base_name)
+        files_count = 0
+        if os.path.exists(images_folder):
+            files_count = len(os.listdir(images_folder))
 
-            if "poster" in video:
-                poster_file = os.path.join(config.VIDEO_PATH, config.get_safe_path(f"{published_at}_{id_}_{file_name}.jpg"))
-                poster_url = video["poster"]
-                urllib.request.urlretrieve(poster_url, poster_file)
+        if files_count > 1:
+            video["files_count"] = files_count
+        else:
+            try:
+                ydl_opts = {"outtmpl": out_file}
+                with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([view_url])
 
-        except Exception as ex:
-            print(f"on grab error: {ex}")
+                if "poster" in video:
+                    poster_file = os.path.join(config.VIDEO_PATH, config.get_safe_path(f"{base_name}.jpg"))
+                    poster_url = video["poster"]
+                    urllib.request.urlretrieve(poster_url, poster_file)
+                
+                print(f"Processing {file_name_main}...")
+                if not os.path.exists(folder):
+                    os.makedirs(folder)
+
+                video_kit.run_with_timeout(lambda: video_kit.extract_audio(out_file, images_folder))
+                video_kit.extract_frames(out_file, images_folder)
+                files_count = len(os.listdir(images_folder))
+                video["files_count"] = files_count
+                
+
+            except Exception as ex:
+                print(f"on grab error: {ex}")
+
+    
+    print(f"Press any key to save results...")
+    input()
+    config.set_config(result_list)
